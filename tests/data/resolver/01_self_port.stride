@@ -1,0 +1,45 @@
+type _SelfType {
+    typeName: "selfType"
+    properties: [
+		typeProperty {
+			name: "location"
+			types: [_IntLiteral]
+			default: none
+			required: on
+		}		
+        typeProperty {
+			name: "values"
+			types: [_IntLiteral]
+			default: none
+			required: on
+		}
+    ]
+}
+
+type _NestedSelfType {
+    typeName: "nestedSelfType"
+    properties: [
+		typeProperty {
+			name: "location"
+			types: [_IntLiteral]
+			default: none
+			required: on
+		}		
+        typeProperty {
+			name: "values"
+			types: [_SelfType]
+			default: none
+			required: on
+		}
+    ]
+}
+
+selfType TypeTest[9] {
+    location: [0,1,2,3,4,5,6,7,8]
+    values: .location
+}
+
+nestedSelfType NestedTypeTest[9] {
+    location: [0,1,2,3,4,5,6,7,8]
+    values: TypeTest
+}

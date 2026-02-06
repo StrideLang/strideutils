@@ -1,0 +1,77 @@
+
+type Allowed1 { typeName: "allowed1"}
+type Allowed2 { typeName: "allowed2"}
+type Allowed3 { typeName: "allowed3"}
+type NotAllowed { typeName: "notallowed"}
+
+allowed1 All1a {}
+allowed1 All1b {}
+allowed2 All2 {}
+allowed2 All3 {}
+notallowed NotAll {}
+
+notallowed NotAllowed {}
+
+type ListConstraints {
+    typeName: "listConstraints"
+    properties: [	
+        typeProperty {
+			name: "list"
+			types: [
+                constrainedList {
+                    minItems: 2
+                    maxItems: 5
+                    uniqueItems: on
+                }
+            ]
+			default: none
+			required: off
+		}
+        typeProperty {
+			name: "allowedTypes"
+			types: [
+                constrainedList {
+                    allowed: [
+                        Allowed1, Allowed2, Allowed3
+                    ]
+                }
+            ]
+			default: []
+			required: off
+		}
+    ]
+}
+
+listConstraints L1 {
+    list: [3,4,5]
+}
+listConstraints L2 {
+    list: [3,4]
+}
+listConstraints L3 {
+    list: [1,2,3,4,5]
+}
+
+listConstraints L4 {
+    list: [3,4,5]
+    allowedTypes: [All1b, All1a, All2, All3, All2]
+}
+
+# Failures -----------------
+
+listConstraints Fails {
+    list: [3]
+}
+
+listConstraints Fails2 {
+    list: [1,2,3,4,5,6]
+}
+
+listConstraints Fails3 {
+    list: [1,2,1,3]
+}
+
+listConstraints Fails4 {
+    list: [3,4,5]
+    allowedTypes: [NotAll, All1b]
+}
