@@ -240,9 +240,9 @@ void ASTFunctions::insertRequiredObjectsForNode(
       insertRequiredObjectsForNode(property->getValue(), objects, tree,
                                    platformScope);
     }
-    for (const std::shared_ptr<DeclarationNode> &usedBlock : blockList) {
+    for (const std::shared_ptr<DeclarationNode> &usedDecl : blockList) {
       // Add declarations to tree if not there
-      auto usedBlockFramework = usedBlock->getCompilerProperty("framework");
+      auto usedBlockFramework = usedDecl->getCompilerProperty("framework");
       std::string fw;
 
       if (usedBlockFramework &&
@@ -253,7 +253,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
 
       // Declarations don't have a namespace, but they can be imported into one
       // This is written into the namespaceTree property
-      auto namespaceTreeNode = usedBlock->getCompilerProperty("namespaceTree");
+      auto namespaceTreeNode = usedDecl->getCompilerProperty("namespaceTree");
       std::vector<std::string> namespaceTree;
       if (namespaceTreeNode) {
         for (const auto &node : namespaceTreeNode->getChildren()) {
@@ -265,11 +265,29 @@ void ASTFunctions::insertRequiredObjectsForNode(
         namespaceTree.erase(namespaceTree.begin());
       }
 
-      if (!ASTQuery::findDeclarationByName(usedBlock->getName(), ScopeStack(),
-                                           tree, namespaceTree, fw)) {
-        tree->addChild(usedBlock);
+      if (auto decl = ASTQuery::findDeclarationByName(
+              usedDecl->getName(), ScopeStack(), tree, namespaceTree, fw)) {
+        auto atProp = decl->getCompilerProperty("_at");
+        auto usedDeclAtProp = usedDecl->getCompilerProperty("_at");
+        if (atProp && usedDeclAtProp) {
+          if (atProp->getNodeType() == AST::String &&
+              usedDeclAtProp->getNodeType() == AST::String) {
+            if (std::static_pointer_cast<ValueNode>(atProp)->getStringValue() !=
+                std::static_pointer_cast<ValueNode>(usedDeclAtProp)
+                    ->getStringValue()) {
+              tree->addChild(usedDecl);
+            }
+            // Don't add if _at matches
+          } else {
+            tree->addChild(usedDecl);
+          }
+        } else {
+          tree->addChild(usedDecl);
+        }
+      } else {
+        tree->addChild(usedDecl);
       }
-      insertRequiredObjectsForNode(usedBlock, objects, tree, platformScope, fw);
+      insertRequiredObjectsForNode(usedDecl, objects, tree, platformScope, fw);
     }
   } else if (node->getNodeType() == AST::Declaration ||
              node->getNodeType() == AST::BundleDeclaration) {

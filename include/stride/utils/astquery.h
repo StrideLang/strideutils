@@ -69,8 +69,8 @@ public:
                          std::vector<LangError> *errors = nullptr);
   // Inheritance information
   static std::vector<std::shared_ptr<DeclarationNode>>
-  getInheritedTypes(std::shared_ptr<DeclarationNode> block, ScopeStack scope,
-                    ASTNode tree);
+  getInheritedTypes(std::shared_ptr<DeclarationNode> block,
+                    const ScopeStack &scope, ASTNode tree);
 
   static std::vector<ASTNode>
   getInheritedPorts(std::shared_ptr<DeclarationNode> block, ScopeStack scope,
@@ -125,6 +125,7 @@ public:
                      std::string propertyName);
 
   static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl);
+  static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl);
 
 private:
   static bool namespaceMatch(std::vector<std::string> scopeList,

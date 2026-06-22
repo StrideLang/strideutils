@@ -2,7 +2,6 @@
 #include "stride/parser/strideparser.h"
 #include "stride/utils/astfunctions.h"
 
-
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -205,6 +204,9 @@ std::shared_ptr<DeclarationNode> ASTQuery::findTypeDeclarationByName(
 }
 
 std::string ASTQuery::getNodeName(ASTNode node) {
+  if (!node) {
+    return std::string();
+  }
   if (node->getNodeType() == AST::Block) {
     BlockNode *name = static_cast<BlockNode *>(node.get());
     return name->getName();
@@ -261,14 +263,14 @@ int ASTQuery::getNodeSize(ASTNode node, const ScopeStack &scopeStack,
     }
   } else if (node->getNodeType() == AST::Block) {
     BlockNode *blockNode = static_cast<BlockNode *>(node.get());
-    std::shared_ptr<DeclarationNode> block =
+    std::shared_ptr<DeclarationNode> decl =
         ASTQuery::findDeclarationByName(blockNode->getName(), scopeStack, tree);
-    if (!block) {
+    if (!decl) {
       size = -1; // Block not declared
-    } else if (block->getNodeType() == AST::BundleDeclaration) {
+    } else if (decl->getNodeType() == AST::BundleDeclaration) {
       std::vector<LangError> errors;
-      size = getBlockDeclaredSize(block, {}, tree, &errors);
-    } else if (block->getNodeType() == AST::Declaration) {
+      size = getBlockDeclaredSize(decl, {}, tree, &errors);
+    } else if (decl->getNodeType() == AST::Declaration) {
       size = 1;
     } else {
       assert(0 == 1);
@@ -466,7 +468,7 @@ int ASTQuery::getLargestPropertySize(
 
 std::vector<std::shared_ptr<DeclarationNode>>
 ASTQuery::getInheritedTypes(std::shared_ptr<DeclarationNode> block,
-                            ScopeStack scope, ASTNode tree) {
+                            const ScopeStack &scope, ASTNode tree) {
   std::vector<std::shared_ptr<DeclarationNode>> inheritedTypes;
   if (!block) {
     return {};
@@ -840,6 +842,25 @@ bool ASTQuery::isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl) {
         if (inheritsNode && inheritsNode->getNodeType() == AST::Block &&
             std::static_pointer_cast<BlockNode>(inheritsNode)->getName() ==
                 "_CodeGenerator") {
+          isCodeGenerator = true;
+          break;
+        }
+      }
+    }
+  }
+  return isCodeGenerator;
+}
+
+bool ASTQuery::isCallable(std::shared_ptr<DeclarationNode> typeDecl) {
+  bool isCodeGenerator = false;
+  if (typeDecl) {
+    // FIXME: More robust search to include recursive and indirect inheritance
+    auto inheritsProp = typeDecl->getPropertyValue("inherits");
+    if (inheritsProp) {
+      for (const auto &inheritsNode : inheritsProp->getChildren()) {
+        if (inheritsNode && inheritsNode->getNodeType() == AST::Block &&
+            std::static_pointer_cast<BlockNode>(inheritsNode)->getName() ==
+                "_Callable") {
           isCodeGenerator = true;
           break;
         }
