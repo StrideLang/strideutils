@@ -26,7 +26,7 @@ type ObjType3 {
 
 objType2 Obj2 {}
 
-objType Obj { port: Obj2 }
-objType Obj_ { port: objType2 {} }
-objType Obj_ { port: objType3 {} }
-objType Obj__ { port: 3 }
+objType Obj { port: Obj2 } # Valid
+objType Obj_ { port: objType2 {} } # Valid
+objType Obj_ { port: objType3 {} } # Invalid
+objType Obj__ { port: 3 } # Invalid

@@ -39,7 +39,6 @@
 #include <vector>
 
 #include "stride/parser/declarationnode.h"
-//#include "langerror.h"
 
 namespace strd {
 struct LibraryTree {

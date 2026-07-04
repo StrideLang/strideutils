@@ -714,7 +714,8 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
         std::static_pointer_cast<ListNode>(decl->getPropertyValue("blocks"));
     // TODO namespaces
     if (ASTQuery::isCodeGenerator(
-            ASTQuery::findDeclarationByName(decl->getName(), scope, tree)) &&
+            ASTQuery::findDeclarationByName(decl->getName(), scope, tree),
+            scope, tree) &&
         internalBlocks) {
       if (internalBlocks->getNodeType() == AST::List) {
         auto blocks = internalBlocks->getChildren();

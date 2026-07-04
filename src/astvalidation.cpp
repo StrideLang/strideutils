@@ -108,7 +108,7 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
       error.errorTokens.push_back(funcName);
       errors.push_back(error);
     } else {
-      for (std::shared_ptr<PropertyNode> property : func->getProperties()) {
+      for (const auto &property : func->getProperties()) {
         std::string propertyName = property->getName();
         std::vector<std::string> validPorts =
             ASTQuery::getModulePortNames(declaration);
@@ -305,7 +305,7 @@ bool ASTValidation::isValidListProperty(
     return false;
   }
   if (!optional) {
-    for (auto busName : node->getChildren()) {
+    for (const auto &busName : node->getChildren()) {
       if (!validateElement(busName)) {
         if (verbose) {
           std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName

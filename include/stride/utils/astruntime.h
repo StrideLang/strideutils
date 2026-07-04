@@ -1,8 +1,6 @@
 #ifndef ASTRUNTIME_H
 #define ASTRUNTIME_H
 
-#include <functional>
-
 #include "stride/parser/functionnode.h"
 #include "stride/parser/valuenode.h"
 

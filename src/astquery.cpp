@@ -413,8 +413,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::synthesizeBundleDeclarationElement(
         newDecl->setPropertyValue(prop->getName(),
                                   value->getChildren()[index]->deepCopy());
       } else {
-        // Invalid index
-        return nullptr;
+        newDecl->setPropertyValue(prop->getName(), value->deepCopy());
       }
     } else {
       newDecl->setPropertyValue(prop->getName(), prop->getValue()->deepCopy());
@@ -832,42 +831,43 @@ std::shared_ptr<PropertyNode> ASTQuery::findPropertyByName(
   return nullptr;
 }
 
-bool ASTQuery::isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl) {
-  bool isCodeGenerator = false;
+bool ASTQuery::isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
+                               const ScopeStack &scope, ASTNode tree) {
   if (typeDecl) {
-    // FIXME: More robust search to include recursive and indirect inheritance
-    auto inheritsProp = typeDecl->getPropertyValue("inherits");
-    if (inheritsProp) {
-      for (const auto &inheritsNode : inheritsProp->getChildren()) {
-        if (inheritsNode && inheritsNode->getNodeType() == AST::Block &&
-            std::static_pointer_cast<BlockNode>(inheritsNode)->getName() ==
-                "_CodeGenerator") {
-          isCodeGenerator = true;
-          break;
-        }
+    auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    for (const auto &inheritsNode : inheritsNodes) {
+      if (inheritsNode->getName() == "_CodeGenerator") {
+        return true;
       }
     }
   }
-  return isCodeGenerator;
+  return false;
 }
 
-bool ASTQuery::isCallable(std::shared_ptr<DeclarationNode> typeDecl) {
-  bool isCodeGenerator = false;
+bool ASTQuery::isDomainMember(std::shared_ptr<DeclarationNode> typeDecl,
+                              const ScopeStack &scope, ASTNode tree) {
   if (typeDecl) {
-    // FIXME: More robust search to include recursive and indirect inheritance
-    auto inheritsProp = typeDecl->getPropertyValue("inherits");
-    if (inheritsProp) {
-      for (const auto &inheritsNode : inheritsProp->getChildren()) {
-        if (inheritsNode && inheritsNode->getNodeType() == AST::Block &&
-            std::static_pointer_cast<BlockNode>(inheritsNode)->getName() ==
-                "_Callable") {
-          isCodeGenerator = true;
-          break;
-        }
+    auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    for (const auto &inheritsNode : inheritsNodes) {
+      if (inheritsNode->getName() == "_DomainMember") {
+        return true;
       }
     }
   }
-  return isCodeGenerator;
+  return false;
+}
+
+bool ASTQuery::isCallable(std::shared_ptr<DeclarationNode> typeDecl,
+                          const ScopeStack &scope, ASTNode tree) {
+  if (typeDecl) {
+    auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    for (const auto &inheritsNode : inheritsNodes) {
+      if (inheritsNode->getName() == "_Callable") {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool ASTQuery::namespaceMatch(std::vector<std::string> scopeList,

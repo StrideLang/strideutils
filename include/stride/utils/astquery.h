@@ -124,8 +124,9 @@ public:
   findPropertyByName(std::vector<std::shared_ptr<PropertyNode>> properties,
                      std::string propertyName);
 
-  static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl);
-  static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl);
+  static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree);
+  static bool isDomainMember(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree);
+  static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree);
 
 private:
   static bool namespaceMatch(std::vector<std::string> scopeList,

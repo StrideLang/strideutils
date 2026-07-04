@@ -3,7 +3,6 @@
 
 #include "stride/parser/ast.h"
 #include "stride/parser/declarationnode.h"
-#include "stride/parser/streamnode.h"
 
 #include <functional>
 
