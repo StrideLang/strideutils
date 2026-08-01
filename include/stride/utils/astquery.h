@@ -97,8 +97,17 @@ public:
   static std::shared_ptr<DeclarationNode>
   getModuleMainOutputPortBlock(std::shared_ptr<DeclarationNode> moduleDecl);
 
+  /// Returns mainInputPort declaration
   static std::shared_ptr<DeclarationNode>
   getModuleMainInputPortBlock(std::shared_ptr<DeclarationNode> moduleDecl);
+
+  static std::vector<std::shared_ptr<DeclarationNode>>
+  getModuleSecondaryOutputPortBlocks(
+      std::shared_ptr<DeclarationNode> moduleDecl);
+
+  static std::vector<std::shared_ptr<DeclarationNode>>
+  getModuleSecondaryInputPortBlocks(
+      std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::shared_ptr<DeclarationNode>
   getModulePort(std::shared_ptr<DeclarationNode> moduleDecl, std::string name);
@@ -124,9 +133,23 @@ public:
   findPropertyByName(std::vector<std::shared_ptr<PropertyNode>> properties,
                      std::string propertyName);
 
-  static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree);
-  static bool isDomainMember(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree);
-  static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree);
+  static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
+                              const ScopeStack &scope, ASTNode tree);
+  static bool isDomainMember(std::shared_ptr<DeclarationNode> typeDecl,
+                             const ScopeStack &scope, ASTNode tree);
+  static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl,
+                         const ScopeStack &scope, ASTNode tree);
+  static bool isInputPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
+                               std::shared_ptr<DeclarationNode> funcDecl,
+                               const ScopeStack &scope, ASTNode tree);
+  static bool isOutputPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
+                                std::shared_ptr<DeclarationNode> funcDecl,
+                                const ScopeStack &scope, ASTNode tree);
+  static bool isPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
+                          std::shared_ptr<DeclarationNode> funcDecl,
+                          const ScopeStack &scope, ASTNode tree);
+  static bool isStatelessGenerator(std::shared_ptr<DeclarationNode> typeDecl,
+                                   const ScopeStack &scope, ASTNode tree);
 
 private:
   static bool namespaceMatch(std::vector<std::string> scopeList,

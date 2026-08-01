@@ -143,6 +143,9 @@ std::shared_ptr<DeclarationNode>
 ASTQuery::findTypeDeclaration(std::shared_ptr<DeclarationNode> block,
                               ScopeStack scope, ASTNode tree,
                               std::string currentFramework) {
+  if (!block) {
+    return nullptr;
+  }
   std::string typeName = block->getObjectType();
   return ASTQuery::findTypeDeclarationByName(
       typeName, scope, tree, block->getNamespaceList(), currentFramework);
@@ -685,6 +688,54 @@ std::shared_ptr<DeclarationNode> ASTQuery::getModuleMainInputPortBlock(
   return nullptr;
 }
 
+std::vector<std::shared_ptr<DeclarationNode>>
+strd::ASTQuery::getModuleSecondaryOutputPortBlocks(
+    std::shared_ptr<DeclarationNode> moduleDecl) {
+  std::vector<std::shared_ptr<DeclarationNode>> portBlocks;
+  ListNode *ports =
+      static_cast<ListNode *>(moduleDecl->getPropertyValue("ports").get());
+  if (ports) {
+    if (ports->getNodeType() == AST::List) {
+      for (const ASTNode &port : ports->getChildren()) {
+        std::shared_ptr<DeclarationNode> portBlock =
+            std::static_pointer_cast<DeclarationNode>(port);
+        if (portBlock->getObjectType() == "secondaryOutputPort") {
+          portBlocks.push_back(portBlock);
+        }
+      }
+    } else if (ports->getNodeType() == AST::None) {
+      // If port list is None, then ignore
+    } else {
+      std::cerr << "ERROR! ports property must be a list or None!" << std::endl;
+    }
+  }
+  return portBlocks;
+}
+
+std::vector<std::shared_ptr<DeclarationNode>>
+strd::ASTQuery::getModuleSecondaryInputPortBlocks(
+    std::shared_ptr<DeclarationNode> moduleDecl) {
+  std::vector<std::shared_ptr<DeclarationNode>> portBlocks;
+  ListNode *ports =
+      static_cast<ListNode *>(moduleDecl->getPropertyValue("ports").get());
+  if (ports) {
+    if (ports->getNodeType() == AST::List) {
+      for (const ASTNode &port : ports->getChildren()) {
+        std::shared_ptr<DeclarationNode> portBlock =
+            std::static_pointer_cast<DeclarationNode>(port);
+        if (portBlock->getObjectType() == "secondaryInputPort") {
+          portBlocks.push_back(portBlock);
+        }
+      }
+    } else if (ports->getNodeType() == AST::None) {
+      // If port list is None, then ignore
+    } else {
+      std::cerr << "ERROR! ports property must be a list or None!" << std::endl;
+    }
+  }
+  return portBlocks;
+}
+
 std::shared_ptr<DeclarationNode>
 ASTQuery::getModulePort(std::shared_ptr<DeclarationNode> moduleDecl,
                         std::string name) {
@@ -835,6 +886,7 @@ bool ASTQuery::isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
                                const ScopeStack &scope, ASTNode tree) {
   if (typeDecl) {
     auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    // ASTQuery::
     for (const auto &inheritsNode : inheritsNodes) {
       if (inheritsNode->getName() == "_CodeGenerator") {
         return true;
@@ -864,6 +916,83 @@ bool ASTQuery::isCallable(std::shared_ptr<DeclarationNode> typeDecl,
     for (const auto &inheritsNode : inheritsNodes) {
       if (inheritsNode->getName() == "_Callable") {
         return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isInputPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
+                                std::shared_ptr<DeclarationNode> funcDecl,
+                                const ScopeStack &scope, ASTNode tree) {
+  auto mainInputPort = ASTQuery::getModuleMainInputPortBlock(funcDecl);
+  assert(mainInputPort);
+  auto mainInputBlockNode = mainInputPort->getPropertyValue("block");
+  assert(mainInputBlockNode && mainInputBlockNode->getNodeType() == AST::Block);
+  if (std::static_pointer_cast<BlockNode>(mainInputBlockNode)->getName() ==
+      blockDecl->getName()) {
+    return true;
+  }
+
+  auto secondaryInputPorts =
+      ASTQuery::getModuleSecondaryInputPortBlocks(funcDecl);
+  for (const auto &port : secondaryInputPorts) {
+    auto secondaryInputBlockNode = port->getPropertyValue("block");
+    assert(secondaryInputBlockNode &&
+           secondaryInputBlockNode->getNodeType() == AST::Block);
+    if (std::static_pointer_cast<BlockNode>(secondaryInputBlockNode)
+            ->getName() == blockDecl->getName()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isOutputPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
+                                 std::shared_ptr<DeclarationNode> funcDecl,
+                                 const ScopeStack &scope, ASTNode tree) {
+  auto mainOutputPort = ASTQuery::getModuleMainOutputPortBlock(funcDecl);
+  assert(mainOutputPort);
+  auto mainOutputBlockNode = mainOutputPort->getPropertyValue("block");
+  assert(mainOutputBlockNode &&
+         mainOutputBlockNode->getNodeType() == AST::Block);
+  if (std::static_pointer_cast<BlockNode>(mainOutputBlockNode)->getName() ==
+      blockDecl->getName()) {
+    return true;
+  }
+
+  auto secondaryOutputPorts =
+      ASTQuery::getModuleSecondaryOutputPortBlocks(funcDecl);
+  for (const auto &port : secondaryOutputPorts) {
+    auto secondaryOutputBlockNode = port->getPropertyValue("block");
+    assert(secondaryOutputBlockNode &&
+           secondaryOutputBlockNode->getNodeType() == AST::Block);
+    if (std::static_pointer_cast<BlockNode>(secondaryOutputBlockNode)
+            ->getName() == blockDecl->getName()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
+                           std::shared_ptr<DeclarationNode> funcDecl,
+                           const ScopeStack &scope, ASTNode tree) {
+  return isInputPortBlock(blockDecl, funcDecl, scope, tree) ||
+         isOutputPortBlock(blockDecl, funcDecl, scope, tree);
+}
+
+bool ASTQuery::isStatelessGenerator(std::shared_ptr<DeclarationNode> typeDecl,
+                                    const ScopeStack &scope, ASTNode tree) {
+  if (typeDecl && typeDecl->getObjectType() == "type") {
+    if (typeDecl->getName() == "_Loop" || typeDecl->getName() == "_Reaction") {
+      return isCodeGenerator(typeDecl, scope, tree);
+    }
+    auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    for (const auto &inheritsNode : inheritsNodes) {
+      if (inheritsNode->getName() == "_Reaction" ||
+          inheritsNode->getName() == "_Loop") {
+        return isCodeGenerator(typeDecl, scope, tree);
       }
     }
   }
