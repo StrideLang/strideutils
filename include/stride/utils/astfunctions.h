@@ -16,7 +16,10 @@ public:
   static std::string getDefaultStrideRoot();
 
   // Apply all preprocessing to AST
-  static bool preprocess(ASTNode tree, ScopeStack *platformScope = nullptr);
+  static bool
+  preprocess(ASTNode tree, ScopeStack *platformScope = nullptr,
+             std::vector<std::string> importPaths = {},
+             std::string strideroot = ASTFunctions::getDefaultStrideRoot());
 
   static bool resolveInheritance(ASTNode tree);
   // Insert properties from inherited types if not present

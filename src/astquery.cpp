@@ -814,7 +814,7 @@ ASTNode ASTQuery::getMemberfromBlockBundleConst(
     std::shared_ptr<DeclarationNode> blockDecl, int index, ASTNode tree,
     ScopeStack scopeStack, std::vector<LangError> *errors) {
   ASTNode out = nullptr;
-  if (blockDecl->getObjectType() == "constant") {
+  if (ASTQuery::isConstant(blockDecl, scopeStack, tree)) {
     auto ports = blockDecl->getProperties();
     for (const std::shared_ptr<PropertyNode> &port : ports) {
       if (port->getName() == "value") {
@@ -889,6 +889,22 @@ bool ASTQuery::isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
     // ASTQuery::
     for (const auto &inheritsNode : inheritsNodes) {
       if (inheritsNode->getName() == "_CodeGenerator") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isConstant(std::shared_ptr<DeclarationNode> typeDecl,
+                          const ScopeStack &scope, ASTNode tree) {
+  if (typeDecl) {
+    if (typeDecl->getObjectType() == "constant") {
+      return true;
+    }
+    auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    for (const auto &inheritsNode : inheritsNodes) {
+      if (inheritsNode->getName() == "constant" || inheritsNode->getObjectType() == "constant") {
         return true;
       }
     }

@@ -135,6 +135,8 @@ public:
 
   static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
                               const ScopeStack &scope, ASTNode tree);
+  static bool isConstant(std::shared_ptr<DeclarationNode> typeDecl,
+                         const ScopeStack &scope, ASTNode tree);
   static bool isDomainMember(std::shared_ptr<DeclarationNode> typeDecl,
                              const ScopeStack &scope, ASTNode tree);
   static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl,

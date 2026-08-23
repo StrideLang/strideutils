@@ -75,7 +75,9 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
   return nodes;
 }
 
-bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope) {
+bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope,
+                              std::vector<std::string> importPaths,
+                              std::string strideroot) {
   bool ok = true;
 
   if (!tree) {
@@ -83,8 +85,6 @@ bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope) {
   }
 
   // TODO insert external objects
-
-  auto strideroot = ASTFunctions::getDefaultStrideRoot();
 
   StrideLibrary library;
   { // Process Imports
@@ -112,7 +112,6 @@ bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope) {
       }
     }
 
-    std::vector<std::string> importPaths;
     std::filesystem::path filePath = tree->getFilename();
     filePath.remove_filename();
     importPaths.push_back(filePath.string());
@@ -293,6 +292,11 @@ void ASTFunctions::insertRequiredObjectsForNode(
              node->getNodeType() == AST::BundleDeclaration) {
     std::shared_ptr<DeclarationNode> declaration =
         std::static_pointer_cast<DeclarationNode>(node);
+
+    for (const auto &property : declaration->getProperties()) {
+      insertRequiredObjectsForNode(property->getValue(), objects, tree,
+                                   platformScope);
+    }
     //    vector<ASTNode> namespaceObjects;
     if (declaration->getScopeLevels() > 0) {
       //      namespaceObjects = objects[declaration->getScopeAt(
@@ -401,7 +405,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
           }
         }
       }
-      for (auto usedBlock : blockList) {
+      for (const auto &usedBlock : blockList) {
         auto frameworkNode = usedBlock->getCompilerProperty("framework");
         std::string framework;
         if (frameworkNode && frameworkNode->getNodeType() == AST::String) {
@@ -539,7 +543,9 @@ void ASTFunctions::fillDefaultPropertiesForNode(
       if (functionModule->getObjectType() == "module" ||
           functionModule->getObjectType() == "reaction" ||
           functionModule->getObjectType() == "loop") {
-
+        // TODO use isCodeGenerator
+        // if (ASTQuery::isCodeGenerator(functionModule, {{nullptr,
+        // scopeNodes}}, tree)) {
         if (!functionModule->getPropertyValue("ports")) {
           std::cerr << "ERROR: fillDefaultProperties() No ports definition for "
                     << destFunc->getName() << std::endl;
@@ -905,7 +911,7 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
     std::shared_ptr<DeclarationNode> block = ASTQuery::findDeclarationByName(
         name->getName(), scope, tree, name->getNamespaceList(), framework);
     if (block && block->getNodeType() == AST::Declaration &&
-        block->getObjectType() == "constant") { // Size == 1
+        ASTQuery::isConstant(block, scope, tree)) { // Size == 1
       //            string namespaceValue = name->getScopeAt(0);
       ASTNode declarationNamespace = block->getPropertyValue("namespace");
       //            if (namespaceValue.size() == 0 || namespaceValue)
@@ -1072,7 +1078,7 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
         std::static_pointer_cast<BlockNode>(node);
     std::shared_ptr<DeclarationNode> declaration =
         ASTQuery::findDeclarationByName(nameNode->getName(), scope, tree);
-    if (declaration && declaration->getObjectType() == "constant") {
+    if (declaration && ASTQuery::isConstant(declaration, scope, tree)) {
       return evaluateConstInteger(declaration->getPropertyValue("value"), scope,
                                   tree, errors);
     }
@@ -1309,30 +1315,38 @@ ASTFunctions::processAnonDeclsForScope(const std::vector<ASTNode> scopeTree) {
 std::vector<std::shared_ptr<DeclarationNode>>
 ASTFunctions::extractStreamDeclarations(std::shared_ptr<StreamNode> stream) {
   std::vector<std::shared_ptr<DeclarationNode>> streamDeclarations;
-  auto node = stream->getLeft();
-  do {
-    if (node->getNodeType() == AST::Declaration) {
-      auto decl = std::static_pointer_cast<DeclarationNode>(node);
+  std::shared_ptr<StreamNode> currentStream = stream;
+  while (currentStream) {
+    if (currentStream->getLeft() &&
+        currentStream->getLeft()->getNodeType() == AST::Declaration) {
+      auto decl =
+          std::static_pointer_cast<DeclarationNode>(currentStream->getLeft());
       auto newBlock = std::make_shared<FunctionNode>(
           decl->getName(), std::make_shared<ListNode>(__FILE__, __LINE__),
           __FILE__, __LINE__);
       streamDeclarations.push_back(decl);
-      if (node == stream->getLeft()) {
-        stream->setLeft(newBlock);
+      currentStream->setLeft(newBlock);
+    }
+    if (currentStream->getRight()) {
+      if (currentStream->getRight()->getNodeType() == AST::Declaration) {
+        auto decl = std::static_pointer_cast<DeclarationNode>(
+            currentStream->getRight());
+        auto newBlock = std::make_shared<FunctionNode>(
+            decl->getName(), std::make_shared<ListNode>(__FILE__, __LINE__),
+            __FILE__, __LINE__);
+        streamDeclarations.push_back(decl);
+        currentStream->setRight(newBlock);
+        break;
+      } else if (currentStream->getRight()->getNodeType() == AST::Stream) {
+        currentStream =
+            std::static_pointer_cast<StreamNode>(currentStream->getRight());
       } else {
-        stream->setRight(newBlock);
         break;
       }
-    }
-    if (stream->getRight() == node) {
-      node = nullptr;
-    } else if (stream->getRight()->getNodeType() == AST::Stream) {
-      stream = std::static_pointer_cast<StreamNode>(stream->getRight());
-      node = stream->getLeft();
     } else {
-      node = stream->getRight();
+      break;
     }
-  } while (node);
+  }
   return streamDeclarations;
 }
 
