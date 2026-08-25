@@ -862,7 +862,7 @@ ASTNode ASTQuery::getMemberFromList(ListNode *node, int index,
                                     std::vector<LangError> *errors) {
   if (index < 1 || index > (int)node->getChildren().size()) {
     LangError error;
-    error.type = LangError::ArrayIndexOutOfRange;
+    error.type = LangError::ArrayIndexOutOfBounds;
     error.lineNumber = node->getLine();
     error.errorTokens.push_back(std::to_string(index));
     errors->push_back(error);

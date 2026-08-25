@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.13)
 set(STRIDEUTILS_TEST_SRC
   library.cpp
   schema.cpp
+  astquery_tests.cpp
+  astfunctions_tests.cpp
 )
 
 add_executable(strideutils_tests main.cpp ${STRIDEUTILS_TEST_SRC})
