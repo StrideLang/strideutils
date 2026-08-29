@@ -910,8 +910,10 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
     BlockNode *name = static_cast<BlockNode *>(value.get());
     std::shared_ptr<DeclarationNode> block = ASTQuery::findDeclarationByName(
         name->getName(), scope, tree, name->getNamespaceList(), framework);
-    if (block && block->getNodeType() == AST::Declaration &&
-        ASTQuery::isConstant(block, scope, tree)) { // Size == 1
+    auto typeDecl =
+        ASTQuery::findTypeDeclaration(block, scope, tree, framework);
+    if (typeDecl && typeDecl->getNodeType() == AST::Declaration &&
+        ASTQuery::isConstant(typeDecl, scope, tree)) { // Size == 1
       //            string namespaceValue = name->getScopeAt(0);
       ASTNode declarationNamespace = block->getPropertyValue("namespace");
       //            if (namespaceValue.size() == 0 || namespaceValue)

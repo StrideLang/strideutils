@@ -904,7 +904,8 @@ bool ASTQuery::isConstant(std::shared_ptr<DeclarationNode> typeDecl,
     }
     auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
     for (const auto &inheritsNode : inheritsNodes) {
-      if (inheritsNode->getName() == "constant" || inheritsNode->getObjectType() == "constant") {
+      if (inheritsNode->getName() == "_Constant" ||
+          inheritsNode->getObjectType() == "constant") {
         return true;
       }
     }
