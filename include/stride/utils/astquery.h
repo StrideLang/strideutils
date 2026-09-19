@@ -102,11 +102,11 @@ public:
   getModuleMainInputPortBlock(std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::vector<std::shared_ptr<DeclarationNode>>
-  getModuleSecondaryOutputPortBlocks(
+  getModulePropertyOutputPortBlocks(
       std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::vector<std::shared_ptr<DeclarationNode>>
-  getModuleSecondaryInputPortBlocks(
+  getModulePropertyInputPortBlocks(
       std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::shared_ptr<DeclarationNode>
@@ -141,6 +141,8 @@ public:
                              const ScopeStack &scope, ASTNode tree);
   static bool isCallable(std::shared_ptr<DeclarationNode> typeDecl,
                          const ScopeStack &scope, ASTNode tree);
+  static bool isStronglyTyped(std::shared_ptr<DeclarationNode> typeDecl,
+                              const ScopeStack &scope, ASTNode tree);
   static bool isInputPortBlock(std::shared_ptr<DeclarationNode> blockDecl,
                                std::shared_ptr<DeclarationNode> funcDecl,
                                const ScopeStack &scope, ASTNode tree);

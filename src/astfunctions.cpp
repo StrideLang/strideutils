@@ -1,4 +1,5 @@
 #include "stride/utils/astfunctions.h"
+#include "stride/utils/logger.h"
 #include "stride/utils/astquery.h"
 #include "stride/utils/astruntime.h"
 #include "stride/utils/stridelibrary.h"
@@ -28,9 +29,9 @@ std::string ASTFunctions::getDefaultStrideRoot() {
       abspath = std::filesystem::canonical(
           std::filesystem::absolute(std::filesystem::current_path().string() +
                                     "/../../../Stride/strideroot"));
-      //    std::cout << abspath.string() << std::endl;
+      //    LOG_INFO() << abspath.string() << std::endl;
     } catch (...) {
-      std::cerr << "ERROR: Can't find strideroot and STRIDEROOT not set."
+      LOG_ERROR() << "ERROR: Can't find strideroot and STRIDEROOT not set."
                 << std::endl;
     }
     return abspath.string();
@@ -62,11 +63,11 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
         auto children = newTree->getChildren();
         nodes.insert(nodes.end(), children.begin(), children.end());
       } else {
-        std::cerr << "ERROR importing tree: " << dir_entry << " in " << path
+        LOG_ERROR() << "ERROR importing tree: " << dir_entry << " in " << path
                   << std::endl;
         std::vector<LangError> errors = AST::getParseErrors();
         for (LangError error : errors) {
-          std::cerr << error.getErrorText();
+          LOG_ERROR() << error.getErrorText();
         }
       }
     }
@@ -497,8 +498,7 @@ void ASTFunctions::fillDefaultPropertiesForNode(
         destBlock->getObjectType(), {{nullptr, scopeNodes}}, nullptr,
         destBlock->getNamespaceList(), frameworkName);
     if (typeProperties.size() == 0) {
-      std::cerr
-          << "ERROR: fillDefaultPropertiesForNode() No type definition for "
+      LOG_ERROR() << "ERROR: fillDefaultPropertiesForNode() No type definition for "
           << destBlock->getObjectType() << std::endl;
       return;
     }
@@ -547,7 +547,7 @@ void ASTFunctions::fillDefaultPropertiesForNode(
         // if (ASTQuery::isCodeGenerator(functionModule, {{nullptr,
         // scopeNodes}}, tree)) {
         if (!functionModule->getPropertyValue("ports")) {
-          std::cerr << "ERROR: fillDefaultProperties() No ports definition for "
+          LOG_ERROR() << "ERROR: fillDefaultProperties() No ports definition for "
                     << destFunc->getName() << std::endl;
           return;
         }
@@ -644,10 +644,10 @@ resolveStreamBundle(std::shared_ptr<StreamNode> stream,
             builder.addNode(pv);
           }
         } else {
-          std::cerr << "Port property not existent for expansion." << std::endl;
+          LOG_ERROR() << "Port property not existent for expansion." << std::endl;
         }
       } else {
-        std::cerr << "Substition in streams for port properties "
+        LOG_ERROR() << "Substition in streams for port properties "
                      "in bundle declarations only supported for "
                      "internal ports."
                   << std::endl;
@@ -776,7 +776,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
             } else if (value->getNodeType() == AST::List) {
 
             } else {
-              std::cerr << "unexpected node type when processing stream node: "
+              LOG_ERROR() << "unexpected node type when processing stream node: "
                         << AST::toText(value) << std::endl;
               newStreams->addChild(value);
             }
@@ -789,7 +789,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
           //       builder.addNode();
           // }
         } else {
-          std::cerr << "unexpected node type when processing stream node: "
+          LOG_ERROR() << "unexpected node type when processing stream node: "
                     << AST::toText(value) << std::endl;
           newStreams->addChild(value);
         }
@@ -1368,8 +1368,7 @@ bool ASTFunctions::resolveDeclarationInheritance(
       }
       return true;
     } else {
-      std::cerr << __FILE__ << ":" << __LINE__
-                << " ERROR could not resolve inheritance: " << inheritedName
+      LOG_ERROR() << "ERROR could not resolve inheritance: " << inheritedName
                 << std::endl;
       return true;
     }

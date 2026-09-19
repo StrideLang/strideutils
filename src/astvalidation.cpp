@@ -1,4 +1,5 @@
 #include "stride/utils/astvalidation.h"
+#include "stride/utils/logger.h"
 #include "stride/utils/astquery.h"
 
 #include "stride/parser/strideparser.h"
@@ -148,7 +149,7 @@ bool ASTValidation::isValidStringProperty(std::shared_ptr<DeclarationNode> decl,
     return true;
   } else if (!node || node->getNodeType() != AST::String) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -164,7 +165,7 @@ bool ASTValidation::isValidSwitchProperty(std::shared_ptr<DeclarationNode> decl,
     return true;
   } else if (!node || node->getNodeType() != AST::Switch) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -180,7 +181,7 @@ bool ASTValidation::isValidIntProperty(std::shared_ptr<DeclarationNode> decl,
     return true;
   } else if (!node || node->getNodeType() != AST::Int) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -196,7 +197,7 @@ bool ASTValidation::isValidRealProperty(std::shared_ptr<DeclarationNode> decl,
     return true;
   } else if (!node || node->getNodeType() != AST::Real) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -210,7 +211,7 @@ bool ASTValidation::isValidNumberProperty(std::shared_ptr<DeclarationNode> decl,
   auto isNumber = isValidIntProperty(decl, propertyName, optional, false) ||
                   isValidRealProperty(decl, propertyName, optional, false);
   if (verbose && !isNumber) {
-    std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+    LOG_ERROR() << "Failed " << propertyName
               << std::endl;
   }
   return isNumber;
@@ -224,7 +225,7 @@ bool ASTValidation::isValidBlockProperty(std::shared_ptr<DeclarationNode> decl,
     return true;
   } else if (!node || node->getNodeType() != AST::Block) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -240,7 +241,7 @@ bool ASTValidation::isValidNoneProperty(std::shared_ptr<DeclarationNode> decl,
     return true;
   } else if (!node || node->getNodeType() != AST::None) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -256,7 +257,7 @@ bool ASTValidation::isValidDeclarationProperty(
     return true;
   } else if (!node || node->getNodeType() != AST::Declaration) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -268,7 +269,7 @@ bool ASTValidation::isValidDeclarationProperty(
     if (std::find(objectTypes.begin(), objectTypes.end(), decl->getObjectType())
         == objectTypes.end()) {
       if (verbose) {
-        std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+        LOG_ERROR() << "Failed " << propertyName
   << std::endl;
       }
     }
@@ -299,7 +300,7 @@ bool ASTValidation::isValidListProperty(
     return true;
   } else if (!node || node->getNodeType() != AST::List) {
     if (verbose) {
-      std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+      LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
     }
     return false;
@@ -308,7 +309,7 @@ bool ASTValidation::isValidListProperty(
     for (const auto &busName : node->getChildren()) {
       if (!validateElement(busName)) {
         if (verbose) {
-          std::cerr << __FILE__ << ":" << __LINE__ << " Failed " << propertyName
+          LOG_ERROR() << "Failed " << propertyName
                     << std::endl;
         }
         return false;
@@ -579,7 +580,7 @@ void ASTValidation::validateConstrainedInt(
       }
     }
   } else {
-    std::cerr << "Failed constraint" << std::endl;
+    LOG_ERROR() << "Failed constraint" << std::endl;
   }
 }
 
@@ -832,8 +833,7 @@ void ASTValidation::validateConstrainedList(
           }
         }
       } else if (allowedNode->getNodeType() != AST::None) {
-        std::cerr
-            << "ERROR expecting list or none for allowed in constrainedList"
+        LOG_ERROR() << "ERROR expecting list or none for allowed in constrainedList"
             << std::endl;
       }
     }

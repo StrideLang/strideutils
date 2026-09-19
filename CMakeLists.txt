@@ -7,6 +7,7 @@ set(STRIDEUTILS_SRC
   src/astruntime.cpp
   src/astvalidation.cpp
   src/stridelibrary.cpp
+  src/logger.cpp
 )
 
 set(STRIDEUTILS_HEADERS
@@ -15,6 +16,7 @@ set(STRIDEUTILS_HEADERS
   include/stride/utils/astruntime.h
   include/stride/utils/astvalidation.h
   include/stride/utils/stridelibrary.h
+  include/stride/utils/logger.h
 )
 
 add_library(StrideUtils ${STRIDEUTILS_SRC} ${STRIDEUTILS_HEADERS})

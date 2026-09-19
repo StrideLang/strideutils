@@ -1,4 +1,5 @@
 #include "stride/utils/astruntime.h"
+#include "stride/utils/logger.h"
 
 #include <cassert>
 #include <iostream>
@@ -329,19 +330,19 @@ void ASTRuntime::resolveFunction(
     if (input.size() == 2) {
       nodesAreNotEqual(input[0], input[1], output[0], status);
     } else {
-      std::cerr << "ERROR: constraint function NotEqual fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function NotEqual fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "Equal") {
     if (input.size() == 2) {
       nodesAreEqual(input[0], input[1], output[0], status);
     } else {
-      std::cerr << "ERROR: constraint function Equal fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function Equal fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "Greater") {
     if (input.size() == 2) {
       nodesAreNotEqual(input[0], input[1], output[0], status);
     } else {
-      std::cerr << "ERROR: constraint function Greater fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function Greater fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "GreaterOrEqual") {
     if (input.size() == 2) {
@@ -356,14 +357,14 @@ void ASTRuntime::resolveFunction(
           std::static_pointer_cast<ValueNode>(output[0])->getSwitchValue() ||
           greater);
     } else {
-      std::cerr << "ERROR: constraint function GreaterOrEqual fail."
+      LOG_ERROR() << "ERROR: constraint function GreaterOrEqual fail."
                 << std::endl;
     }
   } else if (constraintFunction->getName() == "Less") {
     if (input.size() == 2) {
       nodesIsLesser(input[0], input[1], output[0], status);
     } else {
-      std::cerr << "ERROR: constraint function Less fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function Less fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "LessOrEqual") {
     if (input.size() == 2) {
@@ -378,7 +379,7 @@ void ASTRuntime::resolveFunction(
           std::static_pointer_cast<ValueNode>(output[0])->getSwitchValue() ||
           lesser);
     } else {
-      std::cerr << "ERROR: constraint function LessOrEqual fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function LessOrEqual fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "IsNone") {
     if (input.size() == 1) {
@@ -386,7 +387,7 @@ void ASTRuntime::resolveFunction(
           input[0]->getNodeType() == AST::None);
       status.ok = true;
     } else {
-      std::cerr << "ERROR: constraint function IsNone fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function IsNone fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "IsNotNone") {
     if (input.size() == 1) {
@@ -394,12 +395,12 @@ void ASTRuntime::resolveFunction(
           input[0]->getNodeType() != AST::None);
       status.ok = true;
     } else {
-      std::cerr << "ERROR: constraint function IsNotNone fail." << std::endl;
+      LOG_ERROR() << "ERROR: constraint function IsNotNone fail." << std::endl;
     }
   } else if (constraintFunction->getName() == "Error") {
     if (input.size() == 1 && input[0]->getNodeType() == AST::Switch &&
         std::static_pointer_cast<ValueNode>(input[0])->getSwitchValue()) {
-      //      std::cerr << "Constraint: ERROR";
+      //      LOG_ERROR() << "Constraint: ERROR";
       status.ok = false;
       LangError &err = status.err;
       err.type = LangError::ConstraintFail;
