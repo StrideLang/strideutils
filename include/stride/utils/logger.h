@@ -31,6 +31,9 @@ public:
     static void setWarningOutput(std::ostream* os);
     static void setErrorOutput(std::ostream* os);
 
+    // Option to print full path or just filename (defaults to false / filename only)
+    static void setPrintFullPath(bool printFull);
+
     class LogStream {
     public:
         LogStream(LogLevel level, const char* file, int line);
@@ -68,6 +71,7 @@ private:
     static std::ostream* infoOs;
     static std::ostream* warningOs;
     static std::ostream* errorOs;
+    static bool printFullPath;
 };
 
 } // namespace strd
