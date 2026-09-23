@@ -21,6 +21,9 @@ void Logger::setWarningOutput(std::ostream *os) { warningOs = os; }
 void Logger::setErrorOutput(std::ostream *os) { errorOs = os; }
 void Logger::setPrintFullPath(bool printFull) { printFullPath = printFull; }
 
+void Logger::enableDebug() { debugOs = &std::cout; }
+void Logger::disableDebug() { debugOs = &Logger::nullStream; }
+
 Logger::LogStream::LogStream(LogLevel level, const char *file, int line)
     : level(level) {
   switch (level) {

@@ -34,6 +34,9 @@ public:
     // Option to print full path or just filename (defaults to false / filename only)
     static void setPrintFullPath(bool printFull);
 
+    static void enableDebug();
+    static void disableDebug();
+
     class LogStream {
     public:
         LogStream(LogLevel level, const char* file, int line);
