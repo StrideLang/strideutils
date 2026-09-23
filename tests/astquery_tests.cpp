@@ -80,3 +80,22 @@ TEST_F(ASTQueryTest, GetInheritedTypes) {
   auto inherited = ASTQuery::getInheritedTypes(constantDecl, scope, tree);
   EXPECT_EQ(inherited.size(), 0);
 }
+
+TEST_F(ASTQueryTest, IsConstant) {
+  auto queryTestDecl = ASTQuery::findDeclarationByName("QueryTest", {}, tree);
+  ASSERT_NE(queryTestDecl, nullptr);
+  ScopeStack scope = {
+      {queryTestDecl,
+       queryTestDecl->getPropertyValue("blocks")->getChildren()}};
+
+  auto constantDecl =
+      ASTQuery::findDeclarationByName("MyConstant", scope, tree);
+  ASSERT_NE(constantDecl, nullptr);
+
+  EXPECT_TRUE(ASTQuery::isConstant(constantDecl, scope, tree));
+
+  auto signalDecl = ASTQuery::findDeclarationByName("InBlock", scope, tree);
+  ASSERT_NE(signalDecl, nullptr);
+
+  EXPECT_FALSE(ASTQuery::isConstant(signalDecl, scope, tree));
+}

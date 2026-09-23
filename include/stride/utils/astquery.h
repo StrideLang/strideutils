@@ -69,7 +69,7 @@ public:
                          std::vector<LangError> *errors = nullptr);
   // Inheritance information
   static std::vector<std::shared_ptr<DeclarationNode>>
-  getInheritedTypes(std::shared_ptr<DeclarationNode> block,
+  getInheritedTypes(std::shared_ptr<DeclarationNode> blockTypeDecl,
                     const ScopeStack &scope, ASTNode tree);
 
   static std::vector<ASTNode>

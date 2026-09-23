@@ -1,7 +1,7 @@
 #include "stride/utils/astfunctions.h"
-#include "stride/utils/logger.h"
 #include "stride/utils/astquery.h"
 #include "stride/utils/astruntime.h"
+#include "stride/utils/logger.h"
 #include "stride/utils/stridelibrary.h"
 
 #include "stride/parser/blocknode.h"
@@ -32,7 +32,7 @@ std::string ASTFunctions::getDefaultStrideRoot() {
       //    LOG_INFO() << abspath.string() << std::endl;
     } catch (...) {
       LOG_ERROR() << "ERROR: Can't find strideroot and STRIDEROOT not set."
-                << std::endl;
+                  << std::endl;
     }
     return abspath.string();
   }
@@ -64,7 +64,7 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
         nodes.insert(nodes.end(), children.begin(), children.end());
       } else {
         LOG_ERROR() << "ERROR importing tree: " << dir_entry << " in " << path
-                  << std::endl;
+                    << std::endl;
         std::vector<LangError> errors = AST::getParseErrors();
         for (LangError error : errors) {
           LOG_ERROR() << error.getErrorText();
@@ -498,7 +498,8 @@ void ASTFunctions::fillDefaultPropertiesForNode(
         destBlock->getObjectType(), {{nullptr, scopeNodes}}, nullptr,
         destBlock->getNamespaceList(), frameworkName);
     if (typeProperties.size() == 0) {
-      LOG_ERROR() << "ERROR: fillDefaultPropertiesForNode() No type definition for "
+      LOG_ERROR()
+          << "ERROR: fillDefaultPropertiesForNode() No type definition for "
           << destBlock->getObjectType() << std::endl;
       return;
     }
@@ -547,8 +548,9 @@ void ASTFunctions::fillDefaultPropertiesForNode(
         // if (ASTQuery::isCodeGenerator(functionModule, {{nullptr,
         // scopeNodes}}, tree)) {
         if (!functionModule->getPropertyValue("ports")) {
-          LOG_ERROR() << "ERROR: fillDefaultProperties() No ports definition for "
-                    << destFunc->getName() << std::endl;
+          LOG_ERROR()
+              << "ERROR: fillDefaultProperties() No ports definition for "
+              << destFunc->getName() << std::endl;
           return;
         }
         std::vector<ASTNode> typeProperties =
@@ -644,13 +646,14 @@ resolveStreamBundle(std::shared_ptr<StreamNode> stream,
             builder.addNode(pv);
           }
         } else {
-          LOG_ERROR() << "Port property not existent for expansion." << std::endl;
+          LOG_ERROR() << "Port property not existent for expansion."
+                      << std::endl;
         }
       } else {
         LOG_ERROR() << "Substition in streams for port properties "
-                     "in bundle declarations only supported for "
-                     "internal ports."
-                  << std::endl;
+                       "in bundle declarations only supported for "
+                       "internal ports."
+                    << std::endl;
         builder.addNode(node);
       }
     } else {
@@ -776,8 +779,9 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
             } else if (value->getNodeType() == AST::List) {
 
             } else {
-              LOG_ERROR() << "unexpected node type when processing stream node: "
-                        << AST::toText(value) << std::endl;
+              LOG_ERROR()
+                  << "unexpected node type when processing stream node: "
+                  << AST::toText(value) << std::endl;
               newStreams->addChild(value);
             }
           }
@@ -790,7 +794,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
           // }
         } else {
           LOG_ERROR() << "unexpected node type when processing stream node: "
-                    << AST::toText(value) << std::endl;
+                      << AST::toText(value) << std::endl;
           newStreams->addChild(value);
         }
 
@@ -908,24 +912,22 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
     return newValue;
   } else if (value->getNodeType() == AST::Block) {
     BlockNode *name = static_cast<BlockNode *>(value.get());
-    std::shared_ptr<DeclarationNode> block = ASTQuery::findDeclarationByName(
+    std::shared_ptr<DeclarationNode> decl = ASTQuery::findDeclarationByName(
         name->getName(), scope, tree, name->getNamespaceList(), framework);
-    auto typeDecl =
-        ASTQuery::findTypeDeclaration(block, scope, tree, framework);
-    if (typeDecl && typeDecl->getNodeType() == AST::Declaration &&
-        ASTQuery::isConstant(typeDecl, scope, tree)) { // Size == 1
+    if (decl && decl->getNodeType() == AST::Declaration &&
+        ASTQuery::isConstant(decl, scope, tree)) { // Size == 1
       //            string namespaceValue = name->getScopeAt(0);
-      ASTNode declarationNamespace = block->getPropertyValue("namespace");
+      ASTNode declarationNamespace = decl->getPropertyValue("namespace");
       //            if (namespaceValue.size() == 0 || namespaceValue)
-      ASTNode blockValue = block->getPropertyValue("value");
+      ASTNode blockValue = decl->getPropertyValue("value");
       if (blockValue->getNodeType() == AST::Int ||
           blockValue->getNodeType() == AST::Real ||
           blockValue->getNodeType() == AST::String) {
         blockValue = blockValue->deepCopy();
-        blockValue->setCompilerProperty("resolvedFrom", block);
+        blockValue->setCompilerProperty("resolvedFrom", decl);
         return std::static_pointer_cast<ValueNode>(blockValue);
       }
-      newValue = ASTFunctions::resolveConstant(block->getPropertyValue("value"),
+      newValue = ASTFunctions::resolveConstant(decl->getPropertyValue("value"),
                                                scope, tree, framework);
       return newValue;
     }
@@ -1369,7 +1371,7 @@ bool ASTFunctions::resolveDeclarationInheritance(
       return true;
     } else {
       LOG_ERROR() << "ERROR could not resolve inheritance: " << inheritedName
-                << std::endl;
+                  << std::endl;
       return true;
     }
   } else {
