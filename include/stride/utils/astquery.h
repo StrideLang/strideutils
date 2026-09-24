@@ -154,6 +154,10 @@ public:
                           const ScopeStack &scope, ASTNode tree);
   static bool isStatelessGenerator(std::shared_ptr<DeclarationNode> typeDecl,
                                    const ScopeStack &scope, ASTNode tree);
+  static bool isStateNode(std::shared_ptr<DeclarationNode> typeDecl,
+                          const ScopeStack &scope, ASTNode tree);
+  static bool isTransitionNode(std::shared_ptr<DeclarationNode> typeDecl,
+                               const ScopeStack &scope, ASTNode tree);
 
 private:
   static bool namespaceMatch(std::vector<std::string> scopeList,

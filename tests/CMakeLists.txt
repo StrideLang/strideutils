@@ -5,6 +5,7 @@ set(STRIDEUTILS_TEST_SRC
   schema.cpp
   astquery_tests.cpp
   astfunctions_tests.cpp
+  astquery_statemachine_test.cpp
 )
 
 add_executable(strideutils_tests main.cpp ${STRIDEUTILS_TEST_SRC})

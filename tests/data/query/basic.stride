@@ -1,0 +1,17 @@
+module QueryTest {
+    ports: [
+        mainInputPort InPort {
+            name: 'input'
+            block: InBlock
+        },
+        mainOutputPort OutPort {
+            name: 'output'
+            block: OutBlock
+        }
+    ]
+    blocks: [
+        signal InBlock {},
+        signal OutBlock {},
+        constant MyConstant { value: 42 }
+    ]
+}

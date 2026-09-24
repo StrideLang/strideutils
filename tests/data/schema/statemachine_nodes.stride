@@ -1,0 +1,20 @@
+type _StateType {
+    typeName: "state"
+}
+
+type _TransitionType {
+    typeName: "transition"
+}
+
+state MyState {}
+
+transition MyTransition {}
+
+type _MyExtendedSchema {
+    inherits: [_StateType]
+    typeName: "myExtendedState"
+}
+
+myExtendedState MyExtendedState {}
+
+module JustABlock {}

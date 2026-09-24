@@ -1080,6 +1080,38 @@ bool ASTQuery::isStatelessGenerator(std::shared_ptr<DeclarationNode> typeDecl,
   return false;
 }
 
+bool ASTQuery::isStateNode(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree) {
+  if (!typeDecl) return false;
+  
+  if (typeDecl->getObjectType() == "state" || typeDecl->getName() == "_StateType") {
+    return true;
+  }
+  
+  auto inherited = getInheritedTypes(typeDecl, scope, tree);
+  for (const auto& parent : inherited) {
+    if (parent->getName() == "_StateType") {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isTransitionNode(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree) {
+  if (!typeDecl) return false;
+  
+  if (typeDecl->getObjectType() == "transition" || typeDecl->getName() == "_TransitionType") {
+    return true;
+  }
+  
+  auto inherited = getInheritedTypes(typeDecl, scope, tree);
+  for (const auto& parent : inherited) {
+    if (parent->getName() == "_TransitionType") {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ASTQuery::namespaceMatch(std::vector<std::string> scopeList,
                               std::shared_ptr<DeclarationNode> decl,
                               std::string currentFramework) {
