@@ -1087,10 +1087,18 @@ bool ASTQuery::isStateNode(std::shared_ptr<DeclarationNode> typeDecl, const Scop
     return true;
   }
   
-  auto inherited = getInheritedTypes(typeDecl, scope, tree);
-  for (const auto& parent : inherited) {
-    if (parent->getName() == "_StateType") {
-      return true;
+  std::shared_ptr<DeclarationNode> schemaDecl = typeDecl;
+  if (typeDecl->getObjectType() != "type") {
+    schemaDecl = ASTQuery::findTypeDeclaration(typeDecl, scope, tree);
+  }
+
+  if (schemaDecl) {
+    if (schemaDecl->getName() == "_StateType") return true;
+    auto inherited = getInheritedTypes(schemaDecl, scope, tree);
+    for (const auto& parent : inherited) {
+      if (parent->getName() == "_StateType") {
+        return true;
+      }
     }
   }
   return false;
@@ -1103,10 +1111,18 @@ bool ASTQuery::isTransitionNode(std::shared_ptr<DeclarationNode> typeDecl, const
     return true;
   }
   
-  auto inherited = getInheritedTypes(typeDecl, scope, tree);
-  for (const auto& parent : inherited) {
-    if (parent->getName() == "_TransitionType") {
-      return true;
+  std::shared_ptr<DeclarationNode> schemaDecl = typeDecl;
+  if (typeDecl->getObjectType() != "type") {
+    schemaDecl = ASTQuery::findTypeDeclaration(typeDecl, scope, tree);
+  }
+
+  if (schemaDecl) {
+    if (schemaDecl->getName() == "_TransitionType") return true;
+    auto inherited = getInheritedTypes(schemaDecl, scope, tree);
+    for (const auto& parent : inherited) {
+      if (parent->getName() == "_TransitionType") {
+        return true;
+      }
     }
   }
   return false;
