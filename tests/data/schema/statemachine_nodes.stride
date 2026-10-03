@@ -18,3 +18,15 @@ type _MyExtendedSchema {
 myExtendedState MyExtendedState {}
 
 module JustABlock {}
+state NestedState {
+    blocks: [
+        signal MySignal {}
+    ]
+}
+
+state ParentState {
+    states: [ NestedState ]
+    transitions: [
+        transition GoToNested { target: NestedState }
+    ]
+}

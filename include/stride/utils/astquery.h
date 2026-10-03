@@ -94,6 +94,9 @@ public:
   static std::vector<ASTNode>
   getModuleBlocks(std::shared_ptr<DeclarationNode> moduleDecl);
 
+  static std::vector<ASTNode>
+  getStateMachineBlocks(std::shared_ptr<DeclarationNode> stateDecl);
+
   static std::shared_ptr<DeclarationNode>
   getModuleMainOutputPortBlock(std::shared_ptr<DeclarationNode> moduleDecl);
 
@@ -106,8 +109,7 @@ public:
       std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::vector<std::shared_ptr<DeclarationNode>>
-  getModulePropertyInputPortBlocks(
-      std::shared_ptr<DeclarationNode> moduleDecl);
+  getModulePropertyInputPortBlocks(std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::shared_ptr<DeclarationNode>
   getModulePort(std::shared_ptr<DeclarationNode> moduleDecl, std::string name);
@@ -158,6 +160,8 @@ public:
                           const ScopeStack &scope, ASTNode tree);
   static bool isTransitionNode(std::shared_ptr<DeclarationNode> typeDecl,
                                const ScopeStack &scope, ASTNode tree);
+  static bool isDomainDefinition(std::shared_ptr<DeclarationNode> typeDecl,
+                                 const ScopeStack &scope, ASTNode tree);
 
 private:
   static bool namespaceMatch(std::vector<std::string> scopeList,

@@ -645,6 +645,34 @@ ASTQuery::getModuleBlocks(std::shared_ptr<DeclarationNode> moduleDecl) {
   return blocks;
 }
 
+std::vector<ASTNode>
+ASTQuery::getStateMachineBlocks(std::shared_ptr<DeclarationNode> stateDecl) {
+  std::vector<ASTNode> blocks;
+
+  auto addPropBlocks = [&](const std::string &propName) {
+    ASTNode propNode = stateDecl->getPropertyValue(propName);
+    if (propNode) {
+      if (propNode->getNodeType() == AST::Declaration ||
+          propNode->getNodeType() == AST::BundleDeclaration) {
+        blocks.push_back(propNode);
+      } else if (propNode->getNodeType() == AST::List) {
+        for (const ASTNode &node : propNode->getChildren()) {
+          if (node->getNodeType() == AST::Declaration ||
+              node->getNodeType() == AST::BundleDeclaration) {
+            blocks.push_back(node);
+          }
+        }
+      }
+    }
+  };
+
+  addPropBlocks("blocks");
+  addPropBlocks("states");
+  addPropBlocks("transitions");
+
+  return blocks;
+}
+
 std::shared_ptr<DeclarationNode> ASTQuery::getModuleMainOutputPortBlock(
     std::shared_ptr<DeclarationNode> moduleDecl) {
   ListNode *ports =
@@ -1080,22 +1108,26 @@ bool ASTQuery::isStatelessGenerator(std::shared_ptr<DeclarationNode> typeDecl,
   return false;
 }
 
-bool ASTQuery::isStateNode(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree) {
-  if (!typeDecl) return false;
-  
-  if (typeDecl->getObjectType() == "state" || typeDecl->getName() == "_StateType") {
+bool ASTQuery::isStateNode(std::shared_ptr<DeclarationNode> typeDecl,
+                           const ScopeStack &scope, ASTNode tree) {
+  if (!typeDecl)
+    return false;
+
+  if (typeDecl->getObjectType() == "state" ||
+      typeDecl->getName() == "_StateType") {
     return true;
   }
-  
+
   std::shared_ptr<DeclarationNode> schemaDecl = typeDecl;
   if (typeDecl->getObjectType() != "type") {
     schemaDecl = ASTQuery::findTypeDeclaration(typeDecl, scope, tree);
   }
 
   if (schemaDecl) {
-    if (schemaDecl->getName() == "_StateType") return true;
+    if (schemaDecl->getName() == "_StateType")
+      return true;
     auto inherited = getInheritedTypes(schemaDecl, scope, tree);
-    for (const auto& parent : inherited) {
+    for (const auto &parent : inherited) {
       if (parent->getName() == "_StateType") {
         return true;
       }
@@ -1104,23 +1136,43 @@ bool ASTQuery::isStateNode(std::shared_ptr<DeclarationNode> typeDecl, const Scop
   return false;
 }
 
-bool ASTQuery::isTransitionNode(std::shared_ptr<DeclarationNode> typeDecl, const ScopeStack &scope, ASTNode tree) {
-  if (!typeDecl) return false;
-  
-  if (typeDecl->getObjectType() == "transition" || typeDecl->getName() == "_TransitionType") {
+bool ASTQuery::isTransitionNode(std::shared_ptr<DeclarationNode> typeDecl,
+                                const ScopeStack &scope, ASTNode tree) {
+  if (!typeDecl)
+    return false;
+
+  if (typeDecl->getObjectType() == "transition" ||
+      typeDecl->getName() == "_TransitionType") {
     return true;
   }
-  
+
   std::shared_ptr<DeclarationNode> schemaDecl = typeDecl;
   if (typeDecl->getObjectType() != "type") {
     schemaDecl = ASTQuery::findTypeDeclaration(typeDecl, scope, tree);
   }
 
   if (schemaDecl) {
-    if (schemaDecl->getName() == "_TransitionType") return true;
+    if (schemaDecl->getName() == "_TransitionType")
+      return true;
     auto inherited = getInheritedTypes(schemaDecl, scope, tree);
-    for (const auto& parent : inherited) {
+    for (const auto &parent : inherited) {
       if (parent->getName() == "_TransitionType") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isDomainDefinition(std::shared_ptr<DeclarationNode> typeDecl,
+                                  const ScopeStack &scope, ASTNode tree) {
+  if (typeDecl && typeDecl->getObjectType() == "type") {
+    if (typeDecl->getName() == "_DomainDefinition") {
+      return true;
+    }
+    auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
+    for (const auto &inheritsNode : inheritsNodes) {
+      if (inheritsNode->getName() == "_DomainDefinition") {
         return true;
       }
     }

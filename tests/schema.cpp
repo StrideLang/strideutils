@@ -4,15 +4,6 @@
 #include "stride/utils/astfunctions.h"
 #include "stride/utils/astquery.h"
 #include "stride/utils/astvalidation.h"
-//#include "stride/parser/blocknode.h"
-//#include "stride/parser/bundlenode.h"
-//#include "stride/parser/declarationnode.h"
-//#include "stride/parser/expressionnode.h"
-//#include "stride/parser/functionnode.h"
-//#include "stride/parser/importnode.h"
-//#include "stride/parser/platformnode.h"
-//#include "stride/parser/rangenode.h"
-//#include "stride/parser/valuenode.h"
 
 using namespace strd;
 
