@@ -2,8 +2,13 @@
 #include <chrono>
 #include <iomanip>
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 namespace strd {
+
+static std::mutex streamMutex;
+static std::unordered_map<std::ostream *, bool> streamEndsWithNewline;
 
 // By default, INFO goes to cout, WARNING and ERROR go to cerr, DEBUG goes to
 // nullStream
@@ -15,14 +20,51 @@ bool Logger::printFullPath = false;
 
 NullStream Logger::nullStream;
 
-void Logger::setDebugOutput(std::ostream *os) { debugOs = os; }
-void Logger::setInfoOutput(std::ostream *os) { infoOs = os; }
-void Logger::setWarningOutput(std::ostream *os) { warningOs = os; }
-void Logger::setErrorOutput(std::ostream *os) { errorOs = os; }
+void Logger::setDebugOutput(std::ostream *os) {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  debugOs = os;
+  if (os) streamEndsWithNewline[os] = true;
+}
+
+void Logger::setInfoOutput(std::ostream *os) {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  infoOs = os;
+  if (os) streamEndsWithNewline[os] = true;
+}
+
+void Logger::setWarningOutput(std::ostream *os) {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  warningOs = os;
+  if (os) streamEndsWithNewline[os] = true;
+}
+
+void Logger::setErrorOutput(std::ostream *os) {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  errorOs = os;
+  if (os) streamEndsWithNewline[os] = true;
+}
+
 void Logger::setPrintFullPath(bool printFull) { printFullPath = printFull; }
 
-void Logger::enableDebug() { debugOs = &std::cout; }
-void Logger::disableDebug() { debugOs = &Logger::nullStream; }
+void Logger::enableDebug() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  debugOs = &std::cout;
+  streamEndsWithNewline[debugOs] = true;
+}
+
+void Logger::disableDebug() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  debugOs = &Logger::nullStream;
+}
+
+void Logger::resetLineState(std::ostream *os) {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  if (os) {
+    streamEndsWithNewline[os] = true;
+  } else {
+    streamEndsWithNewline.clear();
+  }
+}
 
 Logger::LogStream::LogStream(LogLevel level, const char *file, int line)
     : level(level) {
@@ -41,30 +83,35 @@ Logger::LogStream::LogStream(LogLevel level, const char *file, int line)
     break;
   }
 
+  if (os == &nullStream) {
+    os = nullptr;
+  }
+
   if (os) {
-    // Add timestamp
+    // Format timestamp
     auto now = std::chrono::system_clock::now();
     auto now_c = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                   now.time_since_epoch()) %
               1000;
 
-    *os << "[" << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S")
-        << '.' << std::setfill('0') << std::setw(3) << ms.count() << "] ";
+    std::ostringstream meta;
+    meta << "[" << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S")
+         << '.' << std::setfill('0') << std::setw(3) << ms.count() << "] ";
 
     // Add log level
     switch (level) {
     case LogLevel::DEBUG:
-      *os << "D ";
+      meta << "D ";
       break;
     case LogLevel::INFO:
-      *os << "I ";
+      meta << "I ";
       break;
     case LogLevel::WARNING:
-      *os << "W ";
+      meta << "W ";
       break;
     case LogLevel::ERROR:
-      *os << "E ";
+      meta << "E ";
       break;
     }
 
@@ -81,13 +128,53 @@ Logger::LogStream::LogStream(LogLevel level, const char *file, int line)
     }
 
     // Add file and line
-    *os << "[" << fileName << ":" << line << "] ";
+    meta << "[" << fileName << ":" << line << "] ";
+    metadata = meta.str();
   }
 }
 
+Logger::LogStream::LogStream(LogStream &&other) noexcept
+    : os(other.os),
+      level(other.level),
+      metadata(std::move(other.metadata)),
+      buffer(std::move(other.buffer)) {
+  other.os = nullptr;
+}
+
+Logger::LogStream &Logger::LogStream::operator=(LogStream &&other) noexcept {
+  if (this != &other) {
+    os = other.os;
+    level = other.level;
+    metadata = std::move(other.metadata);
+    buffer = std::move(other.buffer);
+    other.os = nullptr;
+  }
+  return *this;
+}
+
 Logger::LogStream::~LogStream() {
-  if (os) {
-    os->flush();
+  if (!os) {
+    return;
+  }
+
+  std::string content = buffer.str();
+
+  std::lock_guard<std::mutex> lock(streamMutex);
+
+  auto it = streamEndsWithNewline.find(os);
+  bool atStartOfLine = (it == streamEndsWithNewline.end() || it->second);
+
+  if (atStartOfLine) {
+    *os << metadata;
+  }
+
+  *os << content;
+  os->flush();
+
+  if (!content.empty()) {
+    streamEndsWithNewline[os] = (content.back() == '\n');
+  } else if (atStartOfLine) {
+    streamEndsWithNewline[os] = false;
   }
 }
 

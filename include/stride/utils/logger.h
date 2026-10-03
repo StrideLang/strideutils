@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace strd {
@@ -37,15 +38,23 @@ public:
     static void enableDebug();
     static void disableDebug();
 
+    // Reset line continuation state for a stream, or for all streams if os is nullptr
+    static void resetLineState(std::ostream* os = nullptr);
+
     class LogStream {
     public:
         LogStream(LogLevel level, const char* file, int line);
         ~LogStream();
 
+        LogStream(LogStream&& other) noexcept;
+        LogStream& operator=(LogStream&& other) noexcept;
+        LogStream(const LogStream&) = delete;
+        LogStream& operator=(const LogStream&) = delete;
+
         template <typename T>
         LogStream& operator<<(const T& value) {
             if (os) {
-                *os << value;
+                buffer << value;
             }
             return *this;
         }
@@ -54,7 +63,15 @@ public:
         typedef std::ostream& (*OstreamManipulator)(std::ostream&);
         LogStream& operator<<(OstreamManipulator manip) {
             if (os) {
-                *os << manip;
+                buffer << manip;
+            }
+            return *this;
+        }
+
+        typedef std::ios_base& (*IosManipulator)(std::ios_base&);
+        LogStream& operator<<(IosManipulator manip) {
+            if (os) {
+                buffer << manip;
             }
             return *this;
         }
@@ -62,6 +79,8 @@ public:
     private:
         std::ostream* os;
         LogLevel level;
+        std::string metadata;
+        std::ostringstream buffer;
     };
 
     static LogStream log(LogLevel level, const char* file, int line);
