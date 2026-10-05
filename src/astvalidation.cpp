@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <set>
 #include <unordered_set>
 
 using namespace strd;
@@ -14,20 +15,34 @@ ASTValidation::ASTValidation() {}
 
 std::vector<LangError> ASTValidation::validate(ASTNode tree) {
   std::vector<LangError> errors;
-  validateTypes(tree, errors, {}, tree);
+  std::set<const void *> processedNodes;
+  validateTypes(tree, errors, {}, tree, {}, "", &processedNodes);
   return errors;
 }
 
 void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
                                   ScopeStack scopeStack, ASTNode tree,
                                   std::vector<std::string> parentNamespace,
-                                  std::string currentFramework) {
+                                  std::string currentFramework,
+                                  std::set<const void *> *processedNodes) {
+  if (!node) {
+    return;
+  }
+  std::set<const void *> localProcessed;
+  if (!processedNodes) {
+    processedNodes = &localProcessed;
+  }
+  if (processedNodes->count(node.get()) > 0) {
+    return;
+  }
+  processedNodes->insert(node.get());
+
   if (node->getNodeType() == AST::BundleDeclaration ||
       node->getNodeType() == AST::Declaration) {
     std::shared_ptr<DeclarationNode> decl =
         std::static_pointer_cast<DeclarationNode>(node);
     validateTypesForDeclaration(decl, scopeStack, errors, tree,
-                                currentFramework);
+                                currentFramework, processedNodes);
 
     return; // Children have been processed with corect scopes.
   } else if (node->getNodeType() == AST::Stream) {
@@ -137,7 +152,8 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
     //      frameworkName =
     //          static_pointer_cast<ValueNode>(frameworkNode)->getStringValue();
     //    }
-    validateTypes(childNode, errors, scopeStack, tree, {}, currentFramework);
+    validateTypes(childNode, errors, scopeStack, tree, {}, currentFramework,
+                  processedNodes);
   }
 }
 
@@ -322,7 +338,8 @@ bool ASTValidation::isValidListProperty(
 void ASTValidation::validateTypesForDeclaration(
     std::shared_ptr<DeclarationNode> decl, ScopeStack scopeStack,
     std::vector<LangError> &errors, ASTNode tree,
-    std::string currentFramework) {
+    std::string currentFramework,
+    std::set<const void *> *processedNodes) {
   auto blockType = decl->getObjectType();
 
   auto frameworkNode = decl->getCompilerProperty("framework");
@@ -479,7 +496,7 @@ void ASTValidation::validateTypesForDeclaration(
       // Ignore constraints streams as they play by different rules
       std::vector<LangError> internalErrors;
       validateTypes(property->getValue(), internalErrors, scopeStack, tree,
-                    decl->getNamespaceList(), frameworkName);
+                    decl->getNamespaceList(), frameworkName, processedNodes);
     }
   }
 }

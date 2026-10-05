@@ -52,6 +52,20 @@ ASTQuery::getImportNodes(ASTNode tree) {
   return importList;
 }
 
+std::vector<std::shared_ptr<PackageNode>>
+ASTQuery::getPackageNodes(ASTNode tree) {
+  std::vector<std::shared_ptr<PackageNode>> packageList;
+  if (!tree) {
+    return packageList;
+  }
+  for (const ASTNode &node : tree->getChildren()) {
+    if (node->getNodeType() == AST::Package) {
+      packageList.push_back(std::static_pointer_cast<PackageNode>(node));
+    }
+  }
+  return packageList;
+}
+
 std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationWithType(
     std::string objectName, std::string type, const ScopeStack &scopeStack,
     ASTNode tree, std::vector<std::string> namespaces, std::string framework) {
@@ -505,11 +519,14 @@ ASTQuery::getInheritedTypes(std::shared_ptr<DeclarationNode> blockTypeDecl,
           ASTQuery::findDeclarationByName(inheritsBlock->getName(), scope,
                                           tree);
       if (inheritedDeclaration) {
+        inheritedTypes.push_back(inheritedDeclaration);
         auto parentTypes =
             ASTQuery::getInheritedTypes(inheritedDeclaration, scope, tree);
         inheritedTypes.insert(inheritedTypes.end(), parentTypes.begin(),
                               parentTypes.end());
       }
+    } else if (inherits->getNodeType() == AST::None) {
+      // No inherits property, do nothing
     } else {
       LOG_INFO() << "Unexpected type for inherits property" << std::endl;
     }

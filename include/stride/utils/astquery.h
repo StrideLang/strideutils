@@ -14,6 +14,8 @@ public:
 
   static std::vector<std::shared_ptr<ImportNode>> getImportNodes(ASTNode tree);
 
+  static std::vector<std::shared_ptr<PackageNode>> getPackageNodes(ASTNode tree);
+
   // Find declarations
   static std::shared_ptr<DeclarationNode>
   findDeclarationWithType(std::string objectName, std::string type,

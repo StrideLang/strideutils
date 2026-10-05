@@ -1,0 +1,4 @@
+package PackageRoot::SubPkg
+
+module SubModuleInPkg {
+}

@@ -8,6 +8,7 @@
 #include "stride/parser/valuenode.h"
 
 #include <map>
+#include <set>
 #include <vector>
 
 namespace strd {
@@ -38,14 +39,16 @@ public:
   static void insertRequiredObjectsForNode( //**
       ASTNode node, std::map<std::string, std::vector<ASTNode>> &objects,
       ASTNode tree, ScopeStack *platformScope = nullptr,
-      std::string currentFramework = "");
+      std::string currentFramework = "",
+      std::set<const void *> *processedNodes = nullptr);
 
   // Insert system and library types required in declaration
   // externalNodes provides library and import nodes. The key is the namespace
   // they are imported into
   static void insertDependentTypes(
       std::shared_ptr<DeclarationNode> typeDeclaration,
-      std::map<std::string, std::vector<ASTNode>> &externalNodes, ASTNode tree);
+      std::map<std::string, std::vector<ASTNode>> &externalNodes, ASTNode tree,
+      std::set<const void *> *processedTypes = nullptr);
 
   // Fill default properties for all declarations from type declarations
   // The tree must contain all required declarations (type, module, reaction,

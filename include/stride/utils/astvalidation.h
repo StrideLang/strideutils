@@ -5,6 +5,7 @@
 #include "stride/parser/declarationnode.h"
 
 #include <functional>
+#include <set>
 
 namespace strd {
 class ASTValidation {
@@ -18,7 +19,8 @@ public:
                             ScopeStack scopeStack = ScopeStack(),
                             ASTNode tree = nullptr,
                             std::vector<std::string> parentNamespace = {},
-                            std::string currentFramework = "");
+                            std::string currentFramework = "",
+                            std::set<const void *> *processedNodes = nullptr);
 
   // Validate property types
   static bool isValidStringProperty(std::shared_ptr<DeclarationNode> decl,
@@ -64,11 +66,11 @@ public:
       bool optional = false, bool verbose = true);
 
 protected:
-  static void validateTypesForDeclaration(std::shared_ptr<DeclarationNode> decl,
-                                          ScopeStack scopeStack,
-                                          std::vector<LangError> &errors,
-                                          ASTNode tree,
-                                          std::string currentFramework);
+  static void validateTypesForDeclaration(
+      std::shared_ptr<DeclarationNode> decl, ScopeStack scopeStack,
+      std::vector<LangError> &errors, ASTNode tree,
+      std::string currentFramework,
+      std::set<const void *> *processedNodes = nullptr);
 
   static void
   validateConstrainedInt(std::shared_ptr<DeclarationNode> constrainDecl,
