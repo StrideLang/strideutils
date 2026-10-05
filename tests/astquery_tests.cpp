@@ -99,3 +99,31 @@ TEST_F(ASTQueryTest, IsConstant) {
 
   EXPECT_FALSE(ASTQuery::isConstant(signalDecl, scope, tree));
 }
+
+TEST_F(ASTQueryTest, MultiSegmentNamespaceLookup) {
+  // Create a synthetic declaration in Audio::Filters namespace
+  auto decl = std::make_shared<DeclarationNode>("Biquad", "module", nullptr, "test", 1);
+  decl->appendToPropertyValue("namespaceTree", std::make_shared<ValueNode>("Audio", "test", 1));
+  decl->appendToPropertyValue("namespaceTree", std::make_shared<ValueNode>("Filters", "test", 1));
+  tree->addChild(decl);
+
+  // 1. Direct qualified lookup
+  auto found1 = ASTQuery::findDeclarationByName("Audio::Filters::Biquad", {}, tree);
+  ASSERT_NE(found1, nullptr);
+  EXPECT_EQ(found1->getName(), "Biquad");
+
+  // 2. Lookup with namespaces vector
+  auto found2 = ASTQuery::findDeclarationByName("Biquad", {}, tree, {"Audio", "Filters"});
+  ASSERT_NE(found2, nullptr);
+  EXPECT_EQ(found2->getName(), "Biquad");
+
+  // 3. Partial qualified lookup with base namespace
+  auto found3 = ASTQuery::findDeclarationByName("Filters::Biquad", {}, tree, {"Audio"});
+  ASSERT_NE(found3, nullptr);
+  EXPECT_EQ(found3->getName(), "Biquad");
+
+  // 4. Mismatched namespace lookup should fail
+  auto notFound = ASTQuery::findDeclarationByName("Other::Filters::Biquad", {}, tree);
+  EXPECT_EQ(notFound, nullptr);
+}
+

@@ -83,18 +83,15 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
     std::string objectName, const ScopeStack &scopeStack, ASTNode tree,
     std::vector<std::string> namespaces, std::string currentFramework) {
   std::vector<std::shared_ptr<DeclarationNode>> decls;
-  std::vector<std::string> scopesList;
-  std::istringstream iss(objectName);
-  std::copy(std::istream_iterator<std::string>(iss),
-            std::istream_iterator<std::string>(), back_inserter(scopesList));
-
-  if (objectName.size() > 0) {
-    objectName = scopesList.back();
-    scopesList.pop_back();
-    for (const std::string &ns : namespaces) {
-      scopesList.push_back(ns);
-    }
+  std::vector<std::string> scopesList = namespaces;
+  std::string baseName = objectName;
+  size_t pos = 0;
+  while ((pos = baseName.find("::")) != std::string::npos) {
+    scopesList.push_back(baseName.substr(0, pos));
+    baseName = baseName.substr(pos + 2);
   }
+  objectName = baseName;
+
   for (auto subScopeIt = scopeStack.rbegin(); subScopeIt != scopeStack.rend();
        subScopeIt++) {
     auto subScope = *subScopeIt;
@@ -162,6 +159,15 @@ ASTQuery::findTypeDeclaration(std::shared_ptr<DeclarationNode> block,
 std::shared_ptr<DeclarationNode> ASTQuery::findTypeDeclarationByName(
     std::string typeName, ScopeStack scope, ASTNode tree,
     std::vector<std::string> namespaces, std::string currentFramework) {
+  std::vector<std::string> scopesList = namespaces;
+  std::string baseTypeName = typeName;
+  size_t pos = 0;
+  while ((pos = baseTypeName.find("::")) != std::string::npos) {
+    scopesList.push_back(baseTypeName.substr(0, pos));
+    baseTypeName = baseTypeName.substr(pos + 2);
+  }
+  typeName = baseTypeName;
+
   auto getDecl = [&](ASTNode scopeMember, std::string typeName,
                      std::vector<std::string> namespaces)
       -> std::shared_ptr<DeclarationNode> {
@@ -1253,18 +1259,14 @@ bool ASTQuery::namespaceMatch(std::vector<std::string> scopeList,
 std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationByName(
     std::string objectName, const ScopeStack &scopeStack, ASTNode tree,
     std::vector<std::string> namespaces, std::string framework) {
-  std::vector<std::string> scopesList;
-  std::istringstream iss(objectName);
-  std::copy(std::istream_iterator<std::string>(iss),
-            std::istream_iterator<std::string>(), back_inserter(scopesList));
-
-  if (objectName.size() > 0) {
-    objectName = scopesList.back();
-    scopesList.pop_back();
-    for (std::string &ns : namespaces) {
-      scopesList.push_back(ns);
-    }
+  std::vector<std::string> scopesList = namespaces;
+  std::string baseName = objectName;
+  size_t pos = 0;
+  while ((pos = baseName.find("::")) != std::string::npos) {
+    scopesList.push_back(baseName.substr(0, pos));
+    baseName = baseName.substr(pos + 2);
   }
+  objectName = baseName;
   for (auto subScopeIt = scopeStack.rbegin(); subScopeIt != scopeStack.rend();
        subScopeIt++) {
     auto subScope = *subScopeIt;
