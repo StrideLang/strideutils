@@ -58,7 +58,10 @@ public:
 
   std::shared_ptr<DeclarationNode> findTypeInLibrary(std::string typeName);
 
-  bool isValidBlock(DeclarationNode *block);
+  bool isValidEntity(DeclarationNode *entity);
+  bool isValidBlock(DeclarationNode *block) {
+    return isValidEntity(block);
+  }
 
   std::map<std::string, std::vector<ASTNode>> getLibraryMembers();
 

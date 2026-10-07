@@ -37,7 +37,8 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
   }
   processedNodes->insert(node.get());
 
-  if (node->getNodeType() == AST::BundleDeclaration ||
+  if (node->getNodeType() == AST::ArrayDeclaration ||
+      node->getNodeType() == AST::BundleDeclaration ||
       node->getNodeType() == AST::Declaration) {
     std::shared_ptr<DeclarationNode> decl =
         std::static_pointer_cast<DeclarationNode>(node);
@@ -49,8 +50,9 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
     // Stream members will be processed with children below
   } else if (node->getNodeType() == AST::List) {
     // Children are checked automatically below
-  } else if (node->getNodeType() == AST::Block) {
-    BlockNode *block = static_cast<BlockNode *>(node.get());
+  } else if (node->getNodeType() == AST::Entity ||
+             node->getNodeType() == AST::Block) {
+    EntityNode *block = static_cast<EntityNode *>(node.get());
     std::vector<std::string> namespaces = block->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
                       parentNamespace.end());
@@ -75,8 +77,9 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
       error.errorTokens.push_back(blockName);
       errors.push_back(error);
     }
-  } else if (node->getNodeType() == AST::Bundle) {
-    BundleNode *bundle = static_cast<BundleNode *>(node.get());
+  } else if (node->getNodeType() == AST::Array ||
+             node->getNodeType() == AST::Bundle) {
+    ArrayNode *bundle = static_cast<ArrayNode *>(node.get());
     std::vector<std::string> namespaces = bundle->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
                       parentNamespace.end());
@@ -233,13 +236,14 @@ bool ASTValidation::isValidNumberProperty(std::shared_ptr<DeclarationNode> decl,
   return isNumber;
 }
 
-bool ASTValidation::isValidBlockProperty(std::shared_ptr<DeclarationNode> decl,
-                                         std::string propertyName,
-                                         bool optional, bool verbose) {
+bool ASTValidation::isValidEntityProperty(std::shared_ptr<DeclarationNode> decl,
+                                          std::string propertyName,
+                                          bool optional, bool verbose) {
   auto node = decl->getPropertyValue(propertyName);
   if (!node && optional) {
     return true;
-  } else if (!node || node->getNodeType() != AST::Block) {
+  } else if (!node || (node->getNodeType() != AST::Entity &&
+                       node->getNodeType() != AST::Block)) {
     if (verbose) {
       LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
@@ -814,9 +818,10 @@ void ASTValidation::validateConstrainedList(
               auto constraintDecl =
                   std::static_pointer_cast<DeclarationNode>(node);
 
-            } else if (node->getNodeType() == AST::Block) {
+            } else if (node->getNodeType() == AST::Entity ||
+                       node->getNodeType() == AST::Block) {
               auto blockName =
-                  std::static_pointer_cast<BlockNode>(node)->getName();
+                  std::static_pointer_cast<EntityNode>(node)->getName();
               auto decl = ASTQuery::findDeclarationByName(blockName, scopeStack,
                                                           tree, parentNamespace,
                                                           currentFramework);
@@ -824,7 +829,7 @@ void ASTValidation::validateConstrainedList(
               if (!decl) {
                 checkFailed = true;
               } else {
-                auto declType = decl->getObjectType();
+                auto declType = decl->getEntityType();
                 auto typeDeclaration = ASTQuery::findTypeDeclarationByName(
                     declType, scopeStack, tree, parentNamespace,
                     currentFramework);
@@ -840,7 +845,7 @@ void ASTValidation::validateConstrainedList(
                 error.lineNumber = portValue->getLine();
                 error.filename = portValue->getFilename();
                 error.type = LangError::ConstraintFail;
-                error.errorTokens.push_back(declaration->getObjectType());
+                error.errorTokens.push_back(declaration->getEntityType());
                 error.errorTokens.push_back(AST::toText(allowedNode));
                 error.errorTokens.push_back(AST::toText(node));
                 error.errorTokens.push_back(AST::toText(portValue));
@@ -862,6 +867,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
                                        std::vector<std::string> parentNamespace,
                                        std::string currentFramework) {
   if (child->getNodeType() == AST::Declaration ||
+      child->getNodeType() == AST::ArrayDeclaration ||
       child->getNodeType() == AST::BundleDeclaration) {
     auto typeDeclaration = ASTQuery::findTypeDeclaration(
         std::static_pointer_cast<DeclarationNode>(child), scopeStack, tree,
@@ -869,7 +875,9 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     if (typeDeclaration) {
       return typeDeclaration->getName();
     }
-  } else if (child->getNodeType() == AST::Block ||
+  } else if (child->getNodeType() == AST::Entity ||
+             child->getNodeType() == AST::Block ||
+             child->getNodeType() == AST::Array ||
              child->getNodeType() == AST::Bundle) {
     auto decl = ASTQuery::findDeclarationByName(
         ASTQuery::getNodeName(child), scopeStack, tree,
@@ -888,7 +896,8 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     return std::string("_RealLiteral");
   } else if (child->getNodeType() == AST::Switch) {
     return std::string("_SwitchLiteral");
-  } else if (child->getNodeType() == AST::PortProperty) {
+  } else if (child->getNodeType() == AST::MemberAccess ||
+             child->getNodeType() == AST::PortProperty) {
     return std::string("_PortProperty");
   } else if (child->getNodeType() == AST::None) {
     return std::string("_NoneLiteral");
@@ -905,8 +914,9 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
       std::string typeCode =
           static_cast<ValueNode *>(validType.get())->getStringValue();
       validTypeNames.push_back(typeCode);
-    } else if (validType->getNodeType() == AST::Block) {
-      auto blockNode = std::static_pointer_cast<BlockNode>(validType);
+    } else if (validType->getNodeType() == AST::Entity ||
+               validType->getNodeType() == AST::Block) {
+      auto blockNode = std::static_pointer_cast<EntityNode>(validType);
       std::shared_ptr<DeclarationNode> declaration =
           ASTQuery::findDeclarationByName(blockNode->getName(), scopeStack,
                                           tree);

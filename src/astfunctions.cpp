@@ -704,10 +704,11 @@ resolveStreamBundle(std::shared_ptr<StreamNode> stream,
   StreamNodeBuilder builder;
   auto node = it.next();
   while (node) {
-    if (node->getNodeType() == AST::PortProperty) {
-      auto pp = std::static_pointer_cast<PortPropertyNode>(node);
-      if (pp->getName() == "") {
-        auto pv = decl->getPropertyValue(pp->getPortName());
+    if (node->getNodeType() == AST::MemberAccess ||
+        node->getNodeType() == AST::PortProperty) {
+      auto pp = std::static_pointer_cast<MemberAccessNode>(node);
+      if (pp->getEntity() == "") {
+        auto pv = decl->getPropertyValue(pp->getPropertyName());
         if (pv) {
           if (pv->getNodeType() == AST::List) {
             auto listElems = pv->getChildren();
@@ -750,15 +751,18 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       if (newValue) {
         stream->setLeft(newValue);
       }
-    } else if (stream->getLeft()->getNodeType() == AST::PortProperty) {
-      std::shared_ptr<PortPropertyNode> propertyNode =
-          std::static_pointer_cast<PortPropertyNode>(stream->getLeft());
+    } else if (stream->getLeft()->getNodeType() == AST::MemberAccess ||
+               stream->getLeft()->getNodeType() == AST::PortProperty) {
+      std::shared_ptr<MemberAccessNode> propertyNode =
+          std::static_pointer_cast<MemberAccessNode>(stream->getLeft());
       std::shared_ptr<DeclarationNode> block = ASTQuery::findDeclarationByName(
-          propertyNode->getPortName(), scope, tree);
+          propertyNode->getEntity(), scope, tree);
       if (block) {
-        ASTNode property = block->getPropertyValue(propertyNode->getName());
+        ASTNode property = block->getPropertyValue(propertyNode->getPropertyName());
         if (property) { // First replace if pointing to a name
-          if (property->getNodeType() == AST::Block ||
+          if (property->getNodeType() == AST::Entity ||
+              property->getNodeType() == AST::Block ||
+              property->getNodeType() == AST::Array ||
               property->getNodeType() == AST::Bundle) {
             stream->setLeft(property);
           }
@@ -784,6 +788,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       }
     }
   } else if (node->getNodeType() == AST::Declaration ||
+             node->getNodeType() == AST::ArrayDeclaration ||
              node->getNodeType() == AST::BundleDeclaration) {
     std::shared_ptr<DeclarationNode> decl =
         std::static_pointer_cast<DeclarationNode>(node);
@@ -824,11 +829,12 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
     for (std::shared_ptr<PropertyNode> property : properties) {
       // FIXME verify that decl inherits from _CodeGenerator
       if (property->getName() == "streams" &&
-          decl->getNodeType() == AST::BundleDeclaration) {
+          (decl->getNodeType() == AST::ArrayDeclaration ||
+           decl->getNodeType() == AST::BundleDeclaration)) {
         size_t bundleSize = 0;
-        auto bundle = decl->getBundle();
+        auto bundle = decl->getArrayIndex();
         std::vector<ASTNode> listExprs =
-            decl->getBundle()->getChildren()[0]->getChildren();
+            decl->getArrayIndex()->getChildren()[0]->getChildren();
         for (const ASTNode &expr : listExprs) {
           if (expr->getNodeType() == AST::Int) {
             bundleSize =
@@ -883,8 +889,9 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       }
     }
 
-    if (decl->getNodeType() == AST::BundleDeclaration) {
-      std::shared_ptr<BundleNode> bundle = decl->getBundle();
+    if (decl->getNodeType() == AST::ArrayDeclaration ||
+        decl->getNodeType() == AST::BundleDeclaration) {
+      std::shared_ptr<ArrayNode> bundle = decl->getArrayIndex();
       resolveConstantsInNode(bundle->index(), scope, tree);
     }
   } else if (node->getNodeType() == AST::Expression) {
@@ -944,15 +951,16 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       list->replaceMember(values.second, values.first);
     }
 
-  } else if (node->getNodeType() == AST::Bundle) {
-    std::shared_ptr<BundleNode> bundle =
-        std::static_pointer_cast<BundleNode>(node);
+  } else if (node->getNodeType() == AST::Array ||
+             node->getNodeType() == AST::Bundle) {
+    std::shared_ptr<ArrayNode> bundle =
+        std::static_pointer_cast<ArrayNode>(node);
     std::shared_ptr<ListNode> index = bundle->index();
     resolveConstantsInNode(index, scope, tree);
   }
 }
 
-ASTNode ASTFunctions::resolvePortPropertiesForDecl(
+ASTNode ASTFunctions::resolveMemberAccessForDecl(
     std::shared_ptr<DeclarationNode> decl, ScopeStack scopeStack,
     ASTNode tree) {
   ASTNode out;
@@ -980,8 +988,9 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
       newValue->setCompilerProperty("resolvedFrom", expr);
     }
     return newValue;
-  } else if (value->getNodeType() == AST::Block) {
-    BlockNode *name = static_cast<BlockNode *>(value.get());
+  } else if (value->getNodeType() == AST::Entity ||
+             value->getNodeType() == AST::Block) {
+    EntityNode *name = static_cast<EntityNode *>(value.get());
     std::shared_ptr<DeclarationNode> decl = ASTQuery::findDeclarationByName(
         name->getName(), scope, tree, name->getNamespaceList(), framework);
     if (decl && decl->getNodeType() == AST::Declaration &&
@@ -1001,18 +1010,18 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
                                                scope, tree, framework);
       return newValue;
     }
-  } else if (value->getNodeType() == AST::Bundle) {
+  } else if (value->getNodeType() == AST::Array ||
+             value->getNodeType() == AST::Bundle) {
     // What does this mean??
-  } else if (value->getNodeType() == AST::PortProperty) {
-    PortPropertyNode *propertyNode =
-        static_cast<PortPropertyNode *>(value.get());
+  } else if (value->getNodeType() == AST::MemberAccess ||
+             value->getNodeType() == AST::PortProperty) {
+    MemberAccessNode *propertyNode =
+        static_cast<MemberAccessNode *>(value.get());
     std::shared_ptr<DeclarationNode> block = ASTQuery::findDeclarationByName(
-        propertyNode->getPortName(), scope, tree);
+        propertyNode->getEntity(), scope, tree);
     if (block) {
-      ASTNode propertyValue = block->getPropertyValue(propertyNode->getName());
+      ASTNode propertyValue = block->getPropertyValue(propertyNode->getPropertyName());
       if (propertyValue) {
-        //                || propertyValue->getNodeType() == AST::Block ||
-        //                propertyValue->getNodeType() == AST::Bundle
         if (propertyValue->getNodeType() == AST::Int ||
             propertyValue->getNodeType() == AST::Real ||
             propertyValue->getNodeType() == AST::String) {
@@ -1116,17 +1125,19 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
   int result = 0;
   if (node->getNodeType() == AST::Int) {
     return static_cast<ValueNode *>(node.get())->getIntValue();
-  } else if (node->getNodeType() == AST::Bundle) {
+  } else if (node->getNodeType() == AST::Array ||
+             node->getNodeType() == AST::Bundle) {
     // FIXME this seems to be evaluating the bundle index??
-    BundleNode *bundle = static_cast<BundleNode *>(node.get());
+    ArrayNode *bundle = static_cast<ArrayNode *>(node.get());
     ListNode *indexList = bundle->index().get();
     if (indexList->size() == 1) {
       int index = evaluateConstInteger(indexList->getChildren().at(0), scope,
                                        tree, errors);
       std::shared_ptr<DeclarationNode> declaration =
           ASTQuery::findDeclarationByName(bundle->getName(), scope, tree);
-      if (declaration && declaration->getNodeType() == AST::BundleDeclaration) {
-        ASTNode member = ASTQuery::getMemberfromBlockBundleConst(
+      if (declaration && (declaration->getNodeType() == AST::ArrayDeclaration ||
+                          declaration->getNodeType() == AST::BundleDeclaration)) {
+        ASTNode member = ASTQuery::getMemberFromArrayConst(
             declaration, index, tree, scope, errors);
         std::vector<LangError> internalErrors;
         auto integer =
@@ -1147,9 +1158,10 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
     error.lineNumber = bundle->getLine();
     error.errorTokens.push_back(bundle->getName());
     errors->push_back(error);
-  } else if (node->getNodeType() == AST::Block) {
-    std::shared_ptr<BlockNode> nameNode =
-        std::static_pointer_cast<BlockNode>(node);
+  } else if (node->getNodeType() == AST::Entity ||
+             node->getNodeType() == AST::Block) {
+    std::shared_ptr<EntityNode> nameNode =
+        std::static_pointer_cast<EntityNode>(node);
     std::shared_ptr<DeclarationNode> declaration =
         ASTQuery::findDeclarationByName(nameNode->getName(), scope, tree);
     if (declaration && ASTQuery::isConstant(declaration, scope, tree)) {
@@ -1177,18 +1189,21 @@ double ASTFunctions::evaluateConstReal(ASTNode node, ScopeStack scope,
     return static_cast<ValueNode *>(node.get())->getRealValue();
   } else if (node->getNodeType() == AST::Int) {
     return static_cast<ValueNode *>(node.get())->getIntValue();
-  } else if (node->getNodeType() == AST::Bundle) {
-    BundleNode *bundle = static_cast<BundleNode *>(node.get());
+  } else if (node->getNodeType() == AST::Array ||
+             node->getNodeType() == AST::Bundle) {
+    ArrayNode *bundle = static_cast<ArrayNode *>(node.get());
     std::shared_ptr<DeclarationNode> declaration =
         ASTQuery::findDeclarationByName(bundle->getName(), scope, tree);
     int index = evaluateConstInteger(bundle->index(), scope, tree, errors);
-    if (declaration && declaration->getNodeType() == AST::BundleDeclaration) {
-      ASTNode member = ASTQuery::getMemberfromBlockBundleConst(
+    if (declaration && (declaration->getNodeType() == AST::ArrayDeclaration ||
+                        declaration->getNodeType() == AST::BundleDeclaration)) {
+      ASTNode member = ASTQuery::getMemberFromArrayConst(
           declaration, index, tree, scope, errors);
       return evaluateConstReal(member, scope, tree, errors);
     }
-  } else if (node->getNodeType() == AST::Block) {
-    BlockNode *blockNode = static_cast<BlockNode *>(node.get());
+  } else if (node->getNodeType() == AST::Entity ||
+             node->getNodeType() == AST::Block) {
+    EntityNode *blockNode = static_cast<EntityNode *>(node.get());
     std::shared_ptr<DeclarationNode> declaration =
         ASTQuery::findDeclarationByName(blockNode->getName(), scope, tree,
                                         blockNode->getNamespaceList());
@@ -1210,7 +1225,7 @@ double ASTFunctions::evaluateConstReal(ASTNode node, ScopeStack scope,
       errors->push_back(error);
     }
     if (declaration && declaration->getNodeType() == AST::Declaration) {
-      ASTNode value = ASTQuery::getValueFromConstBlock(declaration.get());
+      ASTNode value = ASTQuery::getValueFromConstEntity(declaration.get());
       if (value->getNodeType() == AST::Int ||
           value->getNodeType() == AST::Real) {
         return static_cast<ValueNode *>(value.get())->toReal();
@@ -1235,18 +1250,21 @@ std::string ASTFunctions::evaluateConstString(ASTNode node, ScopeStack scope,
   std::string result;
   if (node->getNodeType() == AST::String) {
     return std::static_pointer_cast<ValueNode>(node)->getStringValue();
-  } else if (node->getNodeType() == AST::Bundle) {
-    auto bundle = std::static_pointer_cast<BundleNode>(node);
+  } else if (node->getNodeType() == AST::Array ||
+             node->getNodeType() == AST::Bundle) {
+    auto bundle = std::static_pointer_cast<ArrayNode>(node);
     std::shared_ptr<DeclarationNode> declaration =
         ASTQuery::findDeclarationByName(bundle->getName(), scope, tree);
     int index = evaluateConstInteger(bundle->index(), scope, tree, errors);
-    if (declaration && declaration->getNodeType() == AST::BundleDeclaration) {
-      ASTNode member = ASTQuery::getMemberfromBlockBundleConst(
+    if (declaration && (declaration->getNodeType() == AST::ArrayDeclaration ||
+                        declaration->getNodeType() == AST::BundleDeclaration)) {
+      ASTNode member = ASTQuery::getMemberFromArrayConst(
           declaration, index, tree, scope, errors);
       return evaluateConstString(member, scope, tree, currentFramework, errors);
     }
-  } else if (node->getNodeType() == AST::Block) {
-    auto blockNode = std::static_pointer_cast<BlockNode>(node);
+  } else if (node->getNodeType() == AST::Entity ||
+             node->getNodeType() == AST::Block) {
+    auto blockNode = std::static_pointer_cast<EntityNode>(node);
     std::shared_ptr<DeclarationNode> declaration =
         ASTQuery::findDeclarationByName(blockNode->getName(), scope, tree,
                                         blockNode->getNamespaceList(),
@@ -1269,7 +1287,7 @@ std::string ASTFunctions::evaluateConstString(ASTNode node, ScopeStack scope,
       errors->push_back(error);
     }
     if (declaration && declaration->getNodeType() == AST::Declaration) {
-      ASTNode value = ASTQuery::getValueFromConstBlock(declaration.get());
+      ASTNode value = ASTQuery::getValueFromConstEntity(declaration.get());
       if (value) {
         if (value->getNodeType() == AST::String ||
             value->getNodeType() == AST::Int ||
@@ -1280,17 +1298,16 @@ std::string ASTFunctions::evaluateConstString(ASTNode node, ScopeStack scope,
         // Do something?
       }
     }
-  } else if (node->getNodeType() == AST::PortProperty) {
-    PortPropertyNode *propertyNode =
-        static_cast<PortPropertyNode *>(node.get());
+  } else if (node->getNodeType() == AST::MemberAccess ||
+             node->getNodeType() == AST::PortProperty) {
+    MemberAccessNode *propertyNode =
+        static_cast<MemberAccessNode *>(node.get());
     std::shared_ptr<DeclarationNode> block = ASTQuery::findDeclarationByName(
-        propertyNode->getName(), scope, tree, {}, currentFramework);
+        propertyNode->getEntity(), scope, tree, {}, currentFramework);
     if (block) {
       ASTNode propertyValue =
-          block->getPropertyValue(propertyNode->getPortName());
+          block->getPropertyValue(propertyNode->getPropertyName());
       if (propertyValue) {
-        //                || propertyValue->getNodeType() == AST::Block ||
-        //                propertyValue->getNodeType() == AST::Bundle
         if (propertyValue->getNodeType() == AST::String ||
             propertyValue->getNodeType() == AST::Int ||
             propertyValue->getNodeType() == AST::Real) {

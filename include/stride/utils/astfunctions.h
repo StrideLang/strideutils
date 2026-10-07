@@ -70,8 +70,13 @@ public:
                                      ASTNode tree);
 
   static ASTNode
+  resolveMemberAccessForDecl(std::shared_ptr<DeclarationNode> decl,
+                             ScopeStack scopeStack, ASTNode tree);
+  static ASTNode
   resolvePortPropertiesForDecl(std::shared_ptr<DeclarationNode> decl,
-                               ScopeStack scopeStack, ASTNode tree);
+                               ScopeStack scopeStack, ASTNode tree) {
+    return resolveMemberAccessForDecl(decl, scopeStack, tree);
+  }
 
   // Reduce 'value' to a single constant ValueNode if possible
   static std::shared_ptr<ValueNode> resolveConstant(ASTNode value,

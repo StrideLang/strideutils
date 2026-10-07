@@ -38,9 +38,14 @@ public:
   static bool isValidNumberProperty(std::shared_ptr<DeclarationNode> decl,
                                     std::string propertyName,
                                     bool optional = false, bool verbose = true);
+  static bool isValidEntityProperty(std::shared_ptr<DeclarationNode> decl,
+                                    std::string propertyName,
+                                    bool optional = false, bool verbose = true);
   static bool isValidBlockProperty(std::shared_ptr<DeclarationNode> decl,
                                    std::string propertyName,
-                                   bool optional = false, bool verbose = true);
+                                   bool optional = false, bool verbose = true) {
+    return isValidEntityProperty(decl, propertyName, optional, verbose);
+  }
   static bool isValidNoneProperty(std::shared_ptr<DeclarationNode> decl,
                                   std::string propertyName,
                                   bool optional = false, bool verbose = true);

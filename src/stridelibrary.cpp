@@ -78,9 +78,9 @@ StrideLibrary::findTypeInLibrary(std::string typeName) {
   return nullptr;
 }
 
-bool StrideLibrary::isValidBlock(DeclarationNode *block) {
+bool StrideLibrary::isValidEntity(DeclarationNode *block) {
   std::shared_ptr<DeclarationNode> type =
-      findTypeInLibrary(block->getObjectType());
+      findTypeInLibrary(block->getEntityType());
   if (type) {
     if (block->getProperties().size() == 0) {
       return true; // FIXME we need to check if properties are required
