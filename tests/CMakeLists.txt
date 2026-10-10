@@ -17,4 +17,4 @@ target_compile_definitions(strideutils_tests PRIVATE
     TESTS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data/"
 )
 
-add_test(NAME strideutils_tests COMMAND StrideUtilsTests)
+add_test(NAME strideutils_tests COMMAND strideutils_tests)
