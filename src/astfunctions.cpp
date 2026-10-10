@@ -15,6 +15,7 @@
 #include <cassert>
 #include <filesystem>
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 using namespace strd;
@@ -124,6 +125,10 @@ bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope,
     return false;
   }
 
+  if (tree->getCompilerProperty("preprocessed")) {
+    return true;
+  }
+
   // TODO insert external objects
 
   StrideLibrary library;
@@ -170,6 +175,9 @@ bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope,
   ASTFunctions::processAnoymousDeclarations(tree);
   ASTFunctions::fillDefaultProperties(tree);
   ASTFunctions::resolveConstants(tree);
+
+  tree->setCompilerProperty("preprocessed",
+                            std::make_shared<ValueNode>((int64_t)1, __FILE__, __LINE__));
   return ok;
 }
 
@@ -269,34 +277,23 @@ void ASTFunctions::insertRequiredObjectsForNode(
     }
   } else if (node->getNodeType() == AST::Function) {
     FunctionNode *func = static_cast<FunctionNode *>(node.get());
+    ScopeStack localScope;
+    ScopeStack *effectiveScope = platformScope ? platformScope : &localScope;
     for (auto it = objects.begin(); it != objects.end(); it++) {
-      //        auto existingDecl = ASTQuery::findDeclaration(
-      //            QString::fromStdString(func->getName()), {}, tree,
-      //            {it->first}, currentFramework);
       // for now, insert all declarations from all frameworks.
       // FIXME check outer domain and framework to only import needed modules
-      {
-        bool allocated = false;
-        if (!platformScope) {
-          allocated = true;
-          platformScope = new ScopeStack();
-        }
-        platformScope->push_back({nullptr, it->second});
+      effectiveScope->push_back({nullptr, it->second});
 
-        std::vector<std::shared_ptr<DeclarationNode>> alldecls =
-            ASTQuery::findAllDeclarations(func->getName(), *platformScope,
-                                          nullptr, func->getNamespaceList(),
-                                          currentFramework);
-        platformScope->pop_back();
-        if (allocated) {
-          delete platformScope;
-          platformScope = nullptr;
-        }
-        for (const auto &decl : alldecls) {
-          if (std::find(blockList.begin(), blockList.end(), decl) ==
-              blockList.end()) {
-            blockList.push_back(decl);
-          }
+      std::vector<std::shared_ptr<DeclarationNode>> alldecls =
+          ASTQuery::findAllDeclarations(func->getName(), *effectiveScope,
+                                        nullptr, func->getNamespaceList(),
+                                        currentFramework);
+      effectiveScope->pop_back();
+
+      for (const auto &decl : alldecls) {
+        if (std::find(blockList.begin(), blockList.end(), decl) ==
+            blockList.end()) {
+          blockList.push_back(decl);
         }
       }
     }

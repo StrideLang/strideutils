@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace strd {
 
@@ -37,9 +38,18 @@ public:
 
     static void enableDebug();
     static void disableDebug();
+    static bool isDebugEnabled();
 
     // Reset line continuation state for a stream, or for all streams if os is nullptr
     static void resetLineState(std::ostream* os = nullptr);
+
+    // Buffering facility
+    static void startBuffering();
+    static void stopBuffering();
+    static bool isBuffering();
+    static void clearBuffer();
+    static void flushBuffer(std::ostream* target = nullptr);
+    static std::string getBufferedOutput();
 
     class LogStream {
     public:
@@ -89,11 +99,21 @@ public:
     static NullStream nullStream;
 
 private:
+    struct BufferEntry {
+        LogLevel level;
+        std::ostream* originalOs;
+        std::string metadata;
+        std::string message;
+    };
+
     static std::ostream* debugOs;
     static std::ostream* infoOs;
     static std::ostream* warningOs;
     static std::ostream* errorOs;
     static bool printFullPath;
+
+    static bool bufferingEnabled;
+    static std::vector<BufferEntry> logBuffer;
 };
 
 } // namespace strd

@@ -107,3 +107,72 @@ TEST_F(LoggerTest, ResetLineStateForcesMetadata) {
       R"(\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] I \[.*\] Unfinished line\.\.\. \[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] I \[.*\] Forced new metadata\n)");
   EXPECT_TRUE(std::regex_match(out, pattern)) << "Output was: " << out;
 }
+
+TEST_F(LoggerTest, BufferingStoresAndFlushesOnDemand) {
+  Logger::startBuffering();
+  EXPECT_TRUE(Logger::isBuffering());
+
+  LOG_INFO() << "Buffered message 1\n";
+  LOG_ERROR() << "Buffered error 1\n";
+
+  // Streams should be empty while buffering
+  EXPECT_TRUE(infoStream.str().empty());
+  EXPECT_TRUE(errorStream.str().empty());
+
+  // Buffer can be inspected
+  std::string bufferedStr = Logger::getBufferedOutput();
+  EXPECT_TRUE(bufferedStr.find("Buffered message 1\n") != std::string::npos);
+  EXPECT_TRUE(bufferedStr.find("Buffered error 1\n") != std::string::npos);
+
+  // Flushing to original streams
+  Logger::flushBuffer();
+  EXPECT_FALSE(infoStream.str().empty());
+  EXPECT_FALSE(errorStream.str().empty());
+  EXPECT_TRUE(infoStream.str().find("Buffered message 1\n") != std::string::npos);
+  EXPECT_TRUE(errorStream.str().find("Buffered error 1\n") != std::string::npos);
+
+  // Buffer should now be cleared
+  EXPECT_TRUE(Logger::getBufferedOutput().empty());
+
+  Logger::stopBuffering();
+  EXPECT_FALSE(Logger::isBuffering());
+}
+
+TEST_F(LoggerTest, BufferingClearDiscardsLogs) {
+  Logger::startBuffering();
+  LOG_INFO() << "Discard this message\n";
+  EXPECT_FALSE(Logger::getBufferedOutput().empty());
+
+  Logger::clearBuffer();
+  EXPECT_TRUE(Logger::getBufferedOutput().empty());
+
+  Logger::stopBuffering();
+  Logger::flushBuffer();
+  EXPECT_TRUE(infoStream.str().empty());
+}
+
+TEST_F(LoggerTest, BufferingFlushToExplicitTarget) {
+  Logger::startBuffering();
+  LOG_INFO() << "Message for explicit stream\n";
+  LOG_ERROR() << "Error for explicit stream\n";
+
+  std::stringstream customTarget;
+  Logger::flushBuffer(&customTarget);
+
+  EXPECT_TRUE(infoStream.str().empty());
+  EXPECT_TRUE(errorStream.str().empty());
+  EXPECT_TRUE(customTarget.str().find("Message for explicit stream\n") != std::string::npos);
+  EXPECT_TRUE(customTarget.str().find("Error for explicit stream\n") != std::string::npos);
+
+  Logger::stopBuffering();
+}
+
+TEST_F(LoggerTest, IsDebugEnabledQuery) {
+  Logger::disableDebug();
+  EXPECT_FALSE(Logger::isDebugEnabled());
+  Logger::enableDebug();
+  EXPECT_TRUE(Logger::isDebugEnabled());
+  Logger::disableDebug();
+  EXPECT_FALSE(Logger::isDebugEnabled());
+}
+

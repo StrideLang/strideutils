@@ -18,6 +18,9 @@ std::ostream *Logger::warningOs = &std::cerr;
 std::ostream *Logger::errorOs = &std::cerr;
 bool Logger::printFullPath = false;
 
+bool Logger::bufferingEnabled = false;
+std::vector<Logger::BufferEntry> Logger::logBuffer;
+
 NullStream Logger::nullStream;
 
 void Logger::setDebugOutput(std::ostream *os) {
@@ -55,6 +58,76 @@ void Logger::enableDebug() {
 void Logger::disableDebug() {
   std::lock_guard<std::mutex> lock(streamMutex);
   debugOs = &Logger::nullStream;
+}
+
+bool Logger::isDebugEnabled() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  return debugOs != &Logger::nullStream && debugOs != nullptr;
+}
+
+void Logger::startBuffering() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  bufferingEnabled = true;
+}
+
+void Logger::stopBuffering() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  bufferingEnabled = false;
+}
+
+bool Logger::isBuffering() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  return bufferingEnabled;
+}
+
+void Logger::clearBuffer() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  logBuffer.clear();
+}
+
+void Logger::flushBuffer(std::ostream *target) {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  for (const auto &entry : logBuffer) {
+    std::ostream *dest = target ? target : entry.originalOs;
+    if (!dest || dest == &nullStream) {
+      continue;
+    }
+    auto it = streamEndsWithNewline.find(dest);
+    bool atStartOfLine = (it == streamEndsWithNewline.end() || it->second);
+
+    if (atStartOfLine && !entry.metadata.empty()) {
+      *dest << entry.metadata;
+    }
+    *dest << entry.message;
+    dest->flush();
+
+    if (!entry.message.empty()) {
+      streamEndsWithNewline[dest] = (entry.message.back() == '\n');
+    } else if (atStartOfLine) {
+      streamEndsWithNewline[dest] = false;
+    }
+  }
+  logBuffer.clear();
+}
+
+std::string Logger::getBufferedOutput() {
+  std::lock_guard<std::mutex> lock(streamMutex);
+  std::ostringstream ss;
+  std::unordered_map<const void *, bool> simulatedNewline;
+  for (const auto &entry : logBuffer) {
+    auto it = simulatedNewline.find(nullptr);
+    bool atStartOfLine = (it == simulatedNewline.end() || it->second);
+    if (atStartOfLine && !entry.metadata.empty()) {
+      ss << entry.metadata;
+    }
+    ss << entry.message;
+    if (!entry.message.empty()) {
+      simulatedNewline[nullptr] = (entry.message.back() == '\n');
+    } else if (atStartOfLine) {
+      simulatedNewline[nullptr] = false;
+    }
+  }
+  return ss.str();
 }
 
 void Logger::resetLineState(std::ostream *os) {
@@ -160,6 +233,11 @@ Logger::LogStream::~LogStream() {
   std::string content = buffer.str();
 
   std::lock_guard<std::mutex> lock(streamMutex);
+
+  if (bufferingEnabled) {
+    logBuffer.push_back(BufferEntry{level, os, metadata, content});
+    return;
+  }
 
   auto it = streamEndsWithNewline.find(os);
   bool atStartOfLine = (it == streamEndsWithNewline.end() || it->second);
