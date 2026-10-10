@@ -1,4 +1,5 @@
 #include "gtest/gtest.h"
+#include <algorithm>
 
 #include "stride/parser/ast.h"
 #include "stride/parser/declarationnode.h"
