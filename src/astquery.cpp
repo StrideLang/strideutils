@@ -15,8 +15,10 @@ std::vector<std::shared_ptr<SystemNode>>
 ASTQuery::getSystemNodes(ASTNode tree) {
   //  Q_ASSERT(m_tree);
   std::vector<std::shared_ptr<SystemNode>> platformNodes;
-  std::vector<ASTNode> nodes = tree->getChildren();
-  for (const ASTNode &node : nodes) {
+  if (!tree) {
+    return platformNodes;
+  }
+  for (const ASTNode &node : tree->getChildren()) {
     if (node->getNodeType() == AST::Platform) {
       platformNodes.push_back(std::static_pointer_cast<SystemNode>(node));
     }
@@ -27,7 +29,9 @@ ASTQuery::getSystemNodes(ASTNode tree) {
 std::vector<std::shared_ptr<ImportNode>>
 ASTQuery::getImportNodes(ASTNode tree) {
   std::vector<std::shared_ptr<ImportNode>> importList;
-
+  if (!tree) {
+    return importList;
+  }
   for (const ASTNode &node : tree->getChildren()) {
     if (node->getNodeType() == AST::Import) {
       std::shared_ptr<ImportNode> import =
@@ -97,6 +101,7 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
     auto subScope = *subScopeIt;
     for (const ASTNode &scopeNode : subScope.second) {
       if (scopeNode->getNodeType() == AST::BundleDeclaration ||
+          scopeNode->getNodeType() == AST::ArrayDeclaration ||
           scopeNode->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(scopeNode);
@@ -126,12 +131,11 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
   }
   if (tree) {
     for (const ASTNode &node : tree->getChildren()) {
-      if (node->getNodeType() == AST::BundleDeclaration ||
+      if (node->getNodeType() == AST::ArrayDeclaration ||
           node->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(node);
-        std::string name = decl->getName();
-        if (name == objectName) {
+        if (decl->getName() == objectName) {
           if (ASTQuery::namespaceMatch(scopesList, decl, currentFramework)) {
             if (std::find(decls.begin(), decls.end(), decl) == decls.end()) {
               decls.push_back(decl);
@@ -198,7 +202,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::findTypeDeclarationByName(
   if (tree) {
     for (const ASTNode &node : tree->getChildren()) {
       if (node->getNodeType() == AST::Declaration ||
-          node->getNodeType() == AST::BundleDeclaration) {
+          node->getNodeType() == AST::ArrayDeclaration) {
         auto decl = getDecl(node, typeName, namespaces);
         if (decl) {
           return decl;
@@ -209,6 +213,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::findTypeDeclarationByName(
   for (const auto &subScope : scope) {
     for (const auto &scopeMember : subScope.second) {
       if (scopeMember->getNodeType() == AST::Declaration ||
+          scopeMember->getNodeType() == AST::ArrayDeclaration ||
           scopeMember->getNodeType() == AST::BundleDeclaration) {
         auto decl = getDecl(scopeMember, typeName, namespaces);
         if (decl) {
@@ -224,10 +229,11 @@ std::string ASTQuery::getNodeName(ASTNode node) {
   if (!node) {
     return std::string();
   }
-  if (node->getNodeType() == AST::Block) {
+  if (node->getNodeType() == AST::Entity) {
     BlockNode *name = static_cast<BlockNode *>(node.get());
     return name->getName();
-  } else if (node->getNodeType() == AST::Bundle) {
+  } else if (node->getNodeType() == AST::Bundle ||
+             node->getNodeType() == AST::Array) {
     BundleNode *bundle = static_cast<BundleNode *>(node.get());
     return bundle->getName();
   } else if (node->getNodeType() == AST::Function) {
@@ -245,7 +251,7 @@ std::string ASTQuery::getNodeName(ASTNode node) {
     }
     return listCommonName;
   } else if (node->getNodeType() == AST::Declaration ||
-             node->getNodeType() == AST::BundleDeclaration) {
+             node->getNodeType() == AST::ArrayDeclaration) {
     auto decl = std::static_pointer_cast<DeclarationNode>(node);
     return decl->getName();
   } else if (node->getNodeType() == AST::Expression) {
@@ -393,10 +399,10 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
         int startIndex, endIndex;
         startIndex =
             ASTFunctions::evaluateConstInteger(start, scope, tree, errors);
-        ASTNode end = range->startIndex();
+        ASTNode end = range->endIndex();
         endIndex = ASTFunctions::evaluateConstInteger(end, scope, tree, errors);
-        if (end > start) {
-          size += endIndex + startIndex + 1;
+        if (endIndex >= startIndex) {
+          size += endIndex - startIndex + 1;
         }
 
       } else if (exp->getNodeType() == AST::MemberAccess ||
@@ -929,15 +935,24 @@ std::shared_ptr<PropertyNode> ASTQuery::findPropertyByName(
 }
 
 bool ASTQuery::isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
-                               const ScopeStack &scope, ASTNode tree) {
+                              const ScopeStack &scope, ASTNode tree) {
   if (typeDecl) {
+    auto cached = typeDecl->getCompilerProperty("_cache_isCodeGenerator");
+    if (cached && cached->getNodeType() == AST::Switch) {
+      return std::static_pointer_cast<ValueNode>(cached)->getSwitchValue();
+    }
     auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
-    // ASTQuery::
     for (const auto &inheritsNode : inheritsNodes) {
       if (inheritsNode->getName() == "_CodeGenerator") {
+        typeDecl->setCompilerProperty(
+            "_cache_isCodeGenerator",
+            std::make_shared<ValueNode>(true, __FILE__, __LINE__));
         return true;
       }
     }
+    typeDecl->setCompilerProperty(
+        "_cache_isCodeGenerator",
+        std::make_shared<ValueNode>(false, __FILE__, __LINE__));
   }
   return false;
 }
@@ -966,12 +981,22 @@ bool ASTQuery::isConstant(std::shared_ptr<DeclarationNode> decl,
 bool ASTQuery::isDomainMember(std::shared_ptr<DeclarationNode> typeDecl,
                               const ScopeStack &scope, ASTNode tree) {
   if (typeDecl) {
+    auto cached = typeDecl->getCompilerProperty("_cache_isDomainMember");
+    if (cached && cached->getNodeType() == AST::Switch) {
+      return std::static_pointer_cast<ValueNode>(cached)->getSwitchValue();
+    }
     auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
     for (const auto &inheritsNode : inheritsNodes) {
       if (inheritsNode->getName() == "_DomainMember") {
+        typeDecl->setCompilerProperty(
+            "_cache_isDomainMember",
+            std::make_shared<ValueNode>(true, __FILE__, __LINE__));
         return true;
       }
     }
+    typeDecl->setCompilerProperty(
+        "_cache_isDomainMember",
+        std::make_shared<ValueNode>(false, __FILE__, __LINE__));
   }
   return false;
 }
@@ -979,12 +1004,22 @@ bool ASTQuery::isDomainMember(std::shared_ptr<DeclarationNode> typeDecl,
 bool ASTQuery::isCallable(std::shared_ptr<DeclarationNode> typeDecl,
                           const ScopeStack &scope, ASTNode tree) {
   if (typeDecl) {
+    auto cached = typeDecl->getCompilerProperty("_cache_isCallable");
+    if (cached && cached->getNodeType() == AST::Switch) {
+      return std::static_pointer_cast<ValueNode>(cached)->getSwitchValue();
+    }
     auto inheritsNodes = ASTQuery::getInheritedTypes(typeDecl, scope, tree);
     for (const auto &inheritsNode : inheritsNodes) {
       if (inheritsNode->getName() == "_Callable") {
+        typeDecl->setCompilerProperty(
+            "_cache_isCallable",
+            std::make_shared<ValueNode>(true, __FILE__, __LINE__));
         return true;
       }
     }
+    typeDecl->setCompilerProperty(
+        "_cache_isCallable",
+        std::make_shared<ValueNode>(false, __FILE__, __LINE__));
   }
   return false;
 }
@@ -1281,14 +1316,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationByName(
           node->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(node);
-        std::string name = decl->getName();
-        if (name == objectName) {
-          auto frameworkNode = decl->getCompilerProperty("framework");
-          std::string frameworkName;
-          if (frameworkNode && frameworkNode->getNodeType() == AST::String) {
-            frameworkName = std::static_pointer_cast<ValueNode>(frameworkNode)
-                                ->getStringValue();
-          }
+        if (decl->getName() == objectName) {
           if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
             if (framework.size() > 0) {
               auto platformNode = decl->getCompilerProperty("framework");

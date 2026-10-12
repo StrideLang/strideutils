@@ -219,11 +219,9 @@ void ASTFunctions::insertDependentTypes(
         typeDeclaration, {{nullptr, it->second}}, tree);
 
     for (const auto &inheritedType : inheritedTypes) {
-      auto children = tree->getChildren();
-      if (std::find(children.begin(), children.end(), inheritedType) !=
+      const auto &children = tree->getChildren();
+      if (std::find(children.begin(), children.end(), inheritedType) ==
           children.end()) {
-        // nothing
-      } else {
         tree->addChild(inheritedType);
         auto findPos =
             std::find(it->second.begin(), it->second.end(), inheritedType);
