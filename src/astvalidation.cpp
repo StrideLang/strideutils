@@ -38,7 +38,6 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
   processedNodes->insert(node.get());
 
   if (node->getNodeType() == AST::ArrayDeclaration ||
-      node->getNodeType() == AST::BundleDeclaration ||
       node->getNodeType() == AST::Declaration) {
     std::shared_ptr<DeclarationNode> decl =
         std::static_pointer_cast<DeclarationNode>(node);
@@ -50,8 +49,7 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
     // Stream members will be processed with children below
   } else if (node->getNodeType() == AST::List) {
     // Children are checked automatically below
-  } else if (node->getNodeType() == AST::Entity ||
-             node->getNodeType() == AST::Block) {
+  } else if (node->getNodeType() == AST::Entity) {
     EntityNode *block = static_cast<EntityNode *>(node.get());
     std::vector<std::string> namespaces = block->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
@@ -77,8 +75,7 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
       error.errorTokens.push_back(blockName);
       errors.push_back(error);
     }
-  } else if (node->getNodeType() == AST::Array ||
-             node->getNodeType() == AST::Bundle) {
+  } else if (node->getNodeType() == AST::Array) {
     ArrayNode *bundle = static_cast<ArrayNode *>(node.get());
     std::vector<std::string> namespaces = bundle->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
@@ -242,8 +239,7 @@ bool ASTValidation::isValidEntityProperty(std::shared_ptr<DeclarationNode> decl,
   auto node = decl->getPropertyValue(propertyName);
   if (!node && optional) {
     return true;
-  } else if (!node || (node->getNodeType() != AST::Entity &&
-                       node->getNodeType() != AST::Block)) {
+  } else if (!node || node->getNodeType() != AST::Entity) {
     if (verbose) {
       LOG_ERROR() << "Failed " << propertyName
                 << std::endl;
@@ -286,7 +282,7 @@ bool ASTValidation::isValidDeclarationProperty(
     if (objectTypes.size() == 0) {
       return true;
     }
-    if (std::find(objectTypes.begin(), objectTypes.end(), decl->getObjectType())
+    if (std::find(objectTypes.begin(), objectTypes.end(), decl->getEntityType())
         == objectTypes.end()) {
       if (verbose) {
         LOG_ERROR() << "Failed " << propertyName
@@ -344,7 +340,7 @@ void ASTValidation::validateTypesForDeclaration(
     std::vector<LangError> &errors, ASTNode tree,
     std::string currentFramework,
     std::set<const void *> *processedNodes) {
-  auto blockType = decl->getObjectType();
+  auto blockType = decl->getEntityType();
 
   auto frameworkNode = decl->getCompilerProperty("framework");
   std::string frameworkName;
@@ -358,7 +354,7 @@ void ASTValidation::validateTypesForDeclaration(
     LangError error;  // Not a valid type, then error
     error.type = LangError::UnknownType;
     error.lineNumber = decl->getLine();
-    error.errorTokens.push_back(decl->getObjectType());
+    error.errorTokens.push_back(decl->getEntityType());
     error.filename = decl->getFilename();
     errors.push_back(error);
   } else {
@@ -394,19 +390,19 @@ void ASTValidation::validateTypesForDeclaration(
               auto constrainDecl =
                   std::static_pointer_cast<DeclarationNode>(validType);
 
-              if (constrainDecl->getObjectType() == "constrainedInt") {
+              if (constrainDecl->getEntityType() == "constrainedInt") {
                 validateConstrainedInt(constrainDecl, declaration, portName,
                                        portValue, errors);
               }
-              if (constrainDecl->getObjectType() == "constrainedReal") {
+              if (constrainDecl->getEntityType() == "constrainedReal") {
                 validateConstrainedReal(constrainDecl, declaration, portName,
                                         portValue, errors);
               }
-              if (constrainDecl->getObjectType() == "constrainedString") {
+              if (constrainDecl->getEntityType() == "constrainedString") {
                 validateConstrainedString(constrainDecl, declaration, portName,
                                           portValue, errors);
               }
-              if (constrainDecl->getObjectType() == "constrainedList") {
+              if (constrainDecl->getEntityType() == "constrainedList") {
                 validateConstrainedList(constrainDecl, declaration, portName,
                                         portValue, errors, scopeStack, tree, {},
                                         currentFramework);
@@ -479,7 +475,7 @@ void ASTValidation::validateTypesForDeclaration(
       }
     }
   }
-  std::vector<ASTNode> subScope = ASTQuery::getModuleBlocks(decl);
+  std::vector<ASTNode> subScope = ASTQuery::getModuleEntities(decl);
   if (decl->getPropertyValue("ports")) {
     for (const ASTNode &port : decl->getPropertyValue("ports")->getChildren()) {
       subScope.push_back(port);
@@ -522,7 +518,7 @@ void ASTValidation::validateConstrainedInt(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -539,7 +535,7 @@ void ASTValidation::validateConstrainedInt(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -557,7 +553,7 @@ void ASTValidation::validateConstrainedInt(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -575,7 +571,7 @@ void ASTValidation::validateConstrainedInt(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -592,7 +588,7 @@ void ASTValidation::validateConstrainedInt(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -622,7 +618,7 @@ void ASTValidation::validateConstrainedReal(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -639,7 +635,7 @@ void ASTValidation::validateConstrainedReal(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -658,7 +654,7 @@ void ASTValidation::validateConstrainedReal(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -677,7 +673,7 @@ void ASTValidation::validateConstrainedReal(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -705,7 +701,7 @@ void ASTValidation::validateConstrainedString(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -722,7 +718,7 @@ void ASTValidation::validateConstrainedString(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -750,7 +746,7 @@ void ASTValidation::validateConstrainedList(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -767,7 +763,7 @@ void ASTValidation::validateConstrainedList(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -796,7 +792,7 @@ void ASTValidation::validateConstrainedList(
           error.lineNumber = portValue->getLine();
           error.filename = portValue->getFilename();
           error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getObjectType());
+          error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
           error.errorTokens.push_back(AST::toText(constrainDecl));
           error.errorTokens.push_back(AST::toText(portValue));
@@ -818,8 +814,7 @@ void ASTValidation::validateConstrainedList(
               auto constraintDecl =
                   std::static_pointer_cast<DeclarationNode>(node);
 
-            } else if (node->getNodeType() == AST::Entity ||
-                       node->getNodeType() == AST::Block) {
+            } else if (node->getNodeType() == AST::Entity) {
               auto blockName =
                   std::static_pointer_cast<EntityNode>(node)->getName();
               auto decl = ASTQuery::findDeclarationByName(blockName, scopeStack,
@@ -867,8 +862,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
                                        std::vector<std::string> parentNamespace,
                                        std::string currentFramework) {
   if (child->getNodeType() == AST::Declaration ||
-      child->getNodeType() == AST::ArrayDeclaration ||
-      child->getNodeType() == AST::BundleDeclaration) {
+      child->getNodeType() == AST::ArrayDeclaration) {
     auto typeDeclaration = ASTQuery::findTypeDeclaration(
         std::static_pointer_cast<DeclarationNode>(child), scopeStack, tree,
         currentFramework);
@@ -876,9 +870,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
       return typeDeclaration->getName();
     }
   } else if (child->getNodeType() == AST::Entity ||
-             child->getNodeType() == AST::Block ||
-             child->getNodeType() == AST::Array ||
-             child->getNodeType() == AST::Bundle) {
+             child->getNodeType() == AST::Array) {
     auto decl = ASTQuery::findDeclarationByName(
         ASTQuery::getNodeName(child), scopeStack, tree,
         child->getNamespaceList(), currentFramework);
@@ -896,8 +888,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     return std::string("_RealLiteral");
   } else if (child->getNodeType() == AST::Switch) {
     return std::string("_SwitchLiteral");
-  } else if (child->getNodeType() == AST::MemberAccess ||
-             child->getNodeType() == AST::PortProperty) {
+  } else if (child->getNodeType() == AST::MemberAccess) {
     return std::string("_PortProperty");
   } else if (child->getNodeType() == AST::None) {
     return std::string("_NoneLiteral");
@@ -914,8 +905,7 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
       std::string typeCode =
           static_cast<ValueNode *>(validType.get())->getStringValue();
       validTypeNames.push_back(typeCode);
-    } else if (validType->getNodeType() == AST::Entity ||
-               validType->getNodeType() == AST::Block) {
+    } else if (validType->getNodeType() == AST::Entity) {
       auto blockNode = std::static_pointer_cast<EntityNode>(validType);
       std::shared_ptr<DeclarationNode> declaration =
           ASTQuery::findDeclarationByName(blockNode->getName(), scopeStack,
@@ -927,17 +917,17 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
     } else if (validType->getNodeType() == AST::Declaration) {
       auto constrainDecl = std::static_pointer_cast<DeclarationNode>(validType);
 
-      if (constrainDecl->getObjectType() == "constrainedInt") {
+      if (constrainDecl->getEntityType() == "constrainedInt") {
         validTypeNames.push_back("_IntLiteral");
       }
-      if (constrainDecl->getObjectType() == "constrainedReal") {
+      if (constrainDecl->getEntityType() == "constrainedReal") {
         validTypeNames.push_back("_IntLiteral");
         validTypeNames.push_back("_RealLiteral");
       }
-      if (constrainDecl->getObjectType() == "constrainedString") {
+      if (constrainDecl->getEntityType() == "constrainedString") {
         validTypeNames.push_back("_StringLiteral");
       }
-      if (constrainDecl->getObjectType() == "constrainedList") {
+      if (constrainDecl->getEntityType() == "constrainedList") {
         validTypeNames.push_back(""); // FIXME define list type
       }
     }

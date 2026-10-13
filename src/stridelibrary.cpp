@@ -62,7 +62,7 @@ StrideLibrary::findTypeInLibrary(std::string typeName) {
       if (node->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> block =
             std::static_pointer_cast<DeclarationNode>(node);
-        if (block->getObjectType() != "type") {
+        if (block->getEntityType() != "type") {
           continue;
         }
         ASTNode value = block->getPropertyValue("typeName");
@@ -171,7 +171,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         }
         for (const auto &child : fileTree->getChildren()) {
           if (child->getNodeType() == AST::Declaration ||
-              child->getNodeType() == AST::BundleDeclaration) {
+              child->getNodeType() == AST::ArrayDeclaration) {
             if (!pkgSegs.empty() &&
                 !child->getCompilerProperty("namespaceTree")) {
               for (const auto &seg : pkgSegs) {
@@ -187,7 +187,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
       auto dirNodes = ASTFunctions::loadAllInDirectory(dirCandidate.string());
       for (const auto &dNode : dirNodes) {
         if (dNode->getNodeType() == AST::Declaration ||
-            dNode->getNodeType() == AST::BundleDeclaration) {
+            dNode->getNodeType() == AST::ArrayDeclaration) {
           if (!importAs.empty()) {
             dNode->appendToPropertyValue(
                 "namespaceTree",
@@ -201,7 +201,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
       auto dirNodes = ASTFunctions::loadAllInDirectory(dirCandidate.string());
       for (const auto &dNode : dirNodes) {
         if (dNode->getNodeType() == AST::Declaration ||
-            dNode->getNodeType() == AST::BundleDeclaration) {
+            dNode->getNodeType() == AST::ArrayDeclaration) {
           if (!importAs.empty()) {
             dNode->appendToPropertyValue(
                 "namespaceTree",
@@ -223,7 +223,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         }
         for (const auto &child : fileTree->getChildren()) {
           if (child->getNodeType() == AST::Declaration ||
-              child->getNodeType() == AST::BundleDeclaration) {
+              child->getNodeType() == AST::ArrayDeclaration) {
             if (!pkgSegs.empty() &&
                 !child->getCompilerProperty("namespaceTree")) {
               for (const auto &seg : pkgSegs) {
@@ -248,7 +248,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
 
 bool StrideLibrary::isValidProperty(std::shared_ptr<PropertyNode> property,
                                     DeclarationNode *type) {
-  assert(type->getObjectType() == "type");
+  assert(type->getEntityType() == "type");
   std::shared_ptr<PropertyNode> portsInType =
       ASTQuery::findPropertyByName(type->getProperties(), "properties");
   ListNode *portList = static_cast<ListNode *>(portsInType->getValue().get());
@@ -256,7 +256,7 @@ bool StrideLibrary::isValidProperty(std::shared_ptr<PropertyNode> property,
   for (const ASTNode &port : portList->getChildren()) {
     DeclarationNode *portBlock = static_cast<DeclarationNode *>(port.get());
     assert(portBlock->getNodeType() == AST::Declaration);
-    assert(portBlock->getObjectType() == "typeProperty");
+    assert(portBlock->getEntityType() == "typeProperty");
     std::shared_ptr<PropertyNode> portName =
         ASTQuery::findPropertyByName(portBlock->getProperties(), "name");
     std::string portNameInType =

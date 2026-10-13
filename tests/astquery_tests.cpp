@@ -24,7 +24,7 @@ TEST_F(ASTQueryTest, FindDeclarationByName) {
   ASSERT_NE(decl, nullptr);
   EXPECT_EQ(decl->getNodeType(), AST::Declaration);
   EXPECT_EQ(decl->getName(), "QueryTest");
-  EXPECT_EQ(decl->getObjectType(), "module");
+  EXPECT_EQ(decl->getEntityType(), "module");
 }
 
 TEST_F(ASTQueryTest, FindAllDeclarations) {
@@ -52,7 +52,7 @@ TEST_F(ASTQueryTest, GetModulePorts) {
 
   auto inPortDecl = ASTQuery::getModulePort(queryTestDecl, "InPort");
   ASSERT_NE(inPortDecl, nullptr);
-  EXPECT_EQ(inPortDecl->getObjectType(), "mainInputPort");
+  EXPECT_EQ(inPortDecl->getEntityType(), "mainInputPort");
 }
 
 TEST_F(ASTQueryTest, FindTypeDeclarationByName) {

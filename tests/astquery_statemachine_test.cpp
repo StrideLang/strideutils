@@ -61,18 +61,18 @@ TEST(ASTQuery, StateMachineScope) {
   EXPECT_TRUE(nestedState != nullptr);
 
   // Push ParentState and its state machine blocks (states, transitions)
-  scope.push_back({parentState, ASTQuery::getStateMachineBlocks(parentState)});
+  scope.push_back({parentState, ASTQuery::getStateMachineEntities(parentState)});
 
   // Push NestedState and its state machine blocks (blocks)
-  scope.push_back({nestedState, ASTQuery::getStateMachineBlocks(nestedState)});
+  scope.push_back({nestedState, ASTQuery::getStateMachineEntities(nestedState)});
 
   // Should find signal MySignal in the scope
   auto signal = ASTQuery::findDeclarationByName("MySignal", scope, tree);
   EXPECT_TRUE(signal != nullptr);
-  EXPECT_EQ(signal->getObjectType(), "signal");
+  EXPECT_EQ(signal->getEntityType(), "signal");
 
   // Should find transition GoToNested in the scope
   auto transition = ASTQuery::findDeclarationByName("GoToNested", scope, tree);
   EXPECT_TRUE(transition != nullptr);
-  EXPECT_EQ(transition->getObjectType(), "transition");
+  EXPECT_EQ(transition->getEntityType(), "transition");
 }

@@ -17,7 +17,7 @@ TEST(Library, ImportRaw) {
   EXPECT_EQ(nodes.size(), 1);
   EXPECT_EQ(nodes[0]->getNodeType(), AST::Declaration);
   auto decl = std::static_pointer_cast<DeclarationNode>(nodes[0]);
-  EXPECT_EQ(decl->getObjectType(), "module");
+  EXPECT_EQ(decl->getEntityType(), "module");
   EXPECT_EQ(decl->getName(), "LibTest");
 
   auto members = library.getLibraryMembers();
