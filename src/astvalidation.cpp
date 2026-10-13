@@ -50,55 +50,55 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
   } else if (node->getNodeType() == AST::List) {
     // Children are checked automatically below
   } else if (node->getNodeType() == AST::Entity) {
-    EntityNode *block = static_cast<EntityNode *>(node.get());
-    std::vector<std::string> namespaces = block->getNamespaceList();
+    EntityNode *entity = static_cast<EntityNode *>(node.get());
+    std::vector<std::string> namespaces = entity->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
                       parentNamespace.end());
     std::shared_ptr<DeclarationNode> declaration =
-        ASTQuery::findDeclarationByName(block->getName(), scopeStack, tree,
+        ASTQuery::findDeclarationByName(entity->getName(), scopeStack, tree,
                                         namespaces, currentFramework);
     if (!declaration) {
       LangError error;
       error.type = LangError::UndeclaredSymbol;
       error.lineNumber = node->getLine();
       error.filename = node->getFilename();
-      //            error.errorTokens.push_back(block->getName());
-      //            error.errorTokens.push_back(block->getNamespace());
-      std::string blockName = "";
-      if (block->getScopeLevels()) {
-        for (unsigned int i = 0; i < block->getScopeLevels(); i++) {
-          blockName += block->getScopeAt(i);
-          blockName += "::";
+      //            error.errorTokens.push_back(entity->getName());
+      //            error.errorTokens.push_back(entity->getNamespace());
+      std::string entityName = "";
+      if (entity->getScopeLevels()) {
+        for (unsigned int i = 0; i < entity->getScopeLevels(); i++) {
+          entityName += entity->getScopeAt(i);
+          entityName += "::";
         }
       }
-      blockName += block->getName();
-      error.errorTokens.push_back(blockName);
+      entityName += entity->getName();
+      error.errorTokens.push_back(entityName);
       errors.push_back(error);
     }
   } else if (node->getNodeType() == AST::Array) {
-    ArrayNode *bundle = static_cast<ArrayNode *>(node.get());
-    std::vector<std::string> namespaces = bundle->getNamespaceList();
+    ArrayNode *arrayNode = static_cast<ArrayNode *>(node.get());
+    std::vector<std::string> namespaces = arrayNode->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
                       parentNamespace.end());
     std::shared_ptr<DeclarationNode> declaration =
-        ASTQuery::findDeclarationByName(bundle->getName(), scopeStack, tree,
+        ASTQuery::findDeclarationByName(arrayNode->getName(), scopeStack, tree,
                                         namespaces);
     if (!declaration) {
       LangError error;
       error.type = LangError::UndeclaredSymbol;
       error.lineNumber = node->getLine();
       error.filename = node->getFilename();
-      //            error.errorTokens.push_back(bundle->getName());
-      //            error.errorTokens.push_back(bundle->getNamespace());
-      std::string bundleName = "";
-      if (bundle->getScopeLevels()) {
-        for (unsigned int i = 0; i < bundle->getScopeLevels(); i++) {
-          bundleName += bundle->getScopeAt(i);
-          bundleName += "::";
+      //            error.errorTokens.push_back(arrayNode->getName());
+      //            error.errorTokens.push_back(arrayNode->getNamespace());
+      std::string arrayName = "";
+      if (arrayNode->getScopeLevels()) {
+        for (unsigned int i = 0; i < arrayNode->getScopeLevels(); i++) {
+          arrayName += arrayNode->getScopeAt(i);
+          arrayName += "::";
         }
       }
-      bundleName += bundle->getName();
-      error.errorTokens.push_back(bundleName);
+      arrayName += arrayNode->getName();
+      error.errorTokens.push_back(arrayName);
       errors.push_back(error);
     }
   } else if (node->getNodeType() == AST::Function) {
@@ -488,8 +488,8 @@ void ASTValidation::validateTypesForDeclaration(
     frameworkName =
         std::static_pointer_cast<ValueNode>(frameworkNode)->getStringValue();
   }
-  // For BundleDeclarations in particular, we need to ignore the bundle when
-  // declaring types. The inner bundle has no scope set, and trying to find
+  // For ArrayDeclarations in particular, we need to ignore the array when
+  // declaring types. The inner array has no scope set, and trying to find
   // it will fail if the declaration is scoped....
   for (const auto &property : decl->getProperties()) {
     if (property->getName() != "constraints") {
@@ -889,7 +889,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
   } else if (child->getNodeType() == AST::Switch) {
     return std::string("_SwitchLiteral");
   } else if (child->getNodeType() == AST::MemberAccess) {
-    return std::string("_PortProperty");
+    return std::string("_MemberAccess");
   } else if (child->getNodeType() == AST::None) {
     return std::string("_NoneLiteral");
   }

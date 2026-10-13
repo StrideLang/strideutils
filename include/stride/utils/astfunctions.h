@@ -108,8 +108,8 @@ protected:
   // Anonymous declaration helper functions
   static std::vector<ASTNode>
   processAnonDeclsForScope(const std::vector<ASTNode> scopeTree);
-  // Look for declarations in a stream, extract them and replace them with a
-  // block
+  // Look for declarations in a stream, extract them and replace them with an
+  // entity
   static std::vector<std::shared_ptr<DeclarationNode>>
   extractStreamDeclarations(std::shared_ptr<StreamNode> stream);
 };

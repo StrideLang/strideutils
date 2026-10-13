@@ -60,16 +60,16 @@ StrideLibrary::findTypeInLibrary(std::string typeName) {
     auto nodes = libraryTree.nodes;
     for (const ASTNode &node : nodes) {
       if (node->getNodeType() == AST::Declaration) {
-        std::shared_ptr<DeclarationNode> block =
+        std::shared_ptr<DeclarationNode> entityDecl =
             std::static_pointer_cast<DeclarationNode>(node);
-        if (block->getEntityType() != "type") {
+        if (entityDecl->getEntityType() != "type") {
           continue;
         }
-        ASTNode value = block->getPropertyValue("typeName");
+        ASTNode value = entityDecl->getPropertyValue("typeName");
         if (value->getNodeType() == AST::String) {
           if (std::static_pointer_cast<ValueNode>(value)->getStringValue() ==
               typeName) {
-            return block;
+            return entityDecl;
           }
         }
       }
@@ -78,20 +78,20 @@ StrideLibrary::findTypeInLibrary(std::string typeName) {
   return nullptr;
 }
 
-bool StrideLibrary::isValidEntity(DeclarationNode *block) {
+bool StrideLibrary::isValidEntity(DeclarationNode *entityDecl) {
   std::shared_ptr<DeclarationNode> type =
-      findTypeInLibrary(block->getEntityType());
+      findTypeInLibrary(entityDecl->getEntityType());
   if (type) {
-    if (block->getProperties().size() == 0) {
+    if (entityDecl->getProperties().size() == 0) {
       return true; // FIXME we need to check if properties are required
     }
     for (const std::shared_ptr<PropertyNode> &property :
-         block->getProperties()) {
+         entityDecl->getProperties()) {
       if (isValidProperty(property, type.get())) {
         return true;
       }
       // Now check for inherited properties
-      std::vector<DeclarationNode *> parentTypes = getParentTypes(block);
+      std::vector<DeclarationNode *> parentTypes = getParentTypes(entityDecl);
       bool propertyInParent = false;
       for (DeclarationNode *parent : parentTypes) {
         propertyInParent |= isValidProperty(property, parent);
