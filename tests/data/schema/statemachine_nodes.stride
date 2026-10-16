@@ -1,11 +1,3 @@
-type _StateType {
-    typeName: "state"
-}
-
-type _TransitionType {
-    typeName: "transition"
-}
-
 state MyState {}
 
 transition MyTransition {}

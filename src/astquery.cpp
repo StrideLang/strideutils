@@ -11,6 +11,214 @@
 
 using namespace strd;
 
+std::vector<StreamBlockDescriptor>
+ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
+                                   const ScopeStack &scope, ASTNode tree) {
+  std::vector<StreamBlockDescriptor> descriptors;
+  if (!decl) {
+    return descriptors;
+  }
+
+  std::set<std::string> collectedProps;
+
+  auto collectStreamsFromValue =
+      [](ASTNode propVal) -> std::vector<std::shared_ptr<StreamNode>> {
+    std::vector<std::shared_ptr<StreamNode>> streams;
+    if (!propVal) {
+      return streams;
+    }
+    if (propVal->getNodeType() == AST::Stream) {
+      streams.push_back(std::static_pointer_cast<StreamNode>(propVal));
+    } else if (propVal->getNodeType() == AST::List) {
+      for (const auto &c : propVal->getChildren()) {
+        if (c && c->getNodeType() == AST::Stream) {
+          streams.push_back(std::static_pointer_cast<StreamNode>(c));
+        }
+      }
+    }
+    return streams;
+  };
+
+  auto isStreamTypeRef = [](const ASTNode &node) -> bool {
+    if (!node)
+      return false;
+    if (node->getNodeType() == AST::Entity) {
+      const std::string &name =
+          std::static_pointer_cast<EntityNode>(node)->getName();
+      return name == "_StreamType" || name == "_Stream" || name == "stream";
+    }
+    if (node->getNodeType() == AST::Declaration) {
+      const std::string &name =
+          std::static_pointer_cast<DeclarationNode>(node)->getName();
+      return name == "_StreamType" || name == "_Stream" || name == "stream";
+    }
+    if (node->getNodeType() == AST::String) {
+      const std::string &val =
+          std::static_pointer_cast<ValueNode>(node)->getStringValue();
+      return val == "_StreamType" || val == "_Stream" || val == "stream";
+    }
+    return false;
+  };
+
+  auto checkTypeItem = [&](const ASTNode &typeItem) -> bool {
+    if (!typeItem)
+      return false;
+    if (isStreamTypeRef(typeItem)) {
+      return true;
+    }
+    if (typeItem->getNodeType() == AST::Declaration) {
+      auto d = std::static_pointer_cast<DeclarationNode>(typeItem);
+      auto isStreamBlockNode = d->getPropertyValue("isStreamBlock");
+      if (isStreamBlockNode && isStreamBlockNode->getNodeType() == AST::Switch) {
+        if (std::static_pointer_cast<ValueNode>(isStreamBlockNode)
+                ->getSwitchValue()) {
+          return true;
+        }
+      }
+      for (const char *listPropName : {"anyOf", "allowed", "types"}) {
+        auto listProp = d->getPropertyValue(listPropName);
+        if (listProp && listProp->getNodeType() == AST::List) {
+          for (const auto &c : listProp->getChildren()) {
+            if (isStreamTypeRef(c))
+              return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
+
+  // 1. Schema reflection
+  std::vector<ASTNode> portList;
+  auto typeDecl = ASTQuery::findTypeDeclaration(decl, scope, tree);
+  if (typeDecl) {
+    portList = ASTQuery::getPortsForTypeEntity(typeDecl, scope, tree);
+  }
+  if (portList.empty()) {
+    portList = ASTQuery::getPortsForType(decl->getEntityType(), scope, tree);
+  }
+
+  for (const ASTNode &portNode : portList) {
+    if (portNode->getNodeType() != AST::Declaration) {
+      continue;
+    }
+    auto propDef = std::static_pointer_cast<DeclarationNode>(portNode);
+    auto nameVal = propDef->getPropertyValue("name");
+    if (!nameVal || nameVal->getNodeType() != AST::String) {
+      continue;
+    }
+    std::string propName =
+        std::static_pointer_cast<ValueNode>(nameVal)->getStringValue();
+
+    if (collectedProps.count(propName)) {
+      continue;
+    }
+
+    bool isStreamContainer = false;
+
+    // Check isStreamBlock: on
+    auto isStreamBlockNode = propDef->getPropertyValue("isStreamBlock");
+    if (isStreamBlockNode && isStreamBlockNode->getNodeType() == AST::Switch) {
+      isStreamContainer =
+          std::static_pointer_cast<ValueNode>(isStreamBlockNode)
+              ->getSwitchValue();
+    }
+
+    // Check types
+    if (!isStreamContainer) {
+      auto typesVal = propDef->getPropertyValue("types");
+      if (typesVal && typesVal->getNodeType() == AST::List) {
+        for (const auto &typeItem : typesVal->getChildren()) {
+          if (checkTypeItem(typeItem)) {
+            isStreamContainer = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (isStreamContainer) {
+      std::string executionStage;
+      auto stageProp = propDef->getPropertyValue("executionStage");
+      if (stageProp && stageProp->getNodeType() == AST::String) {
+        executionStage =
+            std::static_pointer_cast<ValueNode>(stageProp)->getStringValue();
+      } else if (propName == "streams") {
+        executionStage = "default";
+      } else {
+        executionStage = propName;
+      }
+
+      ASTNode propVal = decl->getPropertyValue(propName);
+      auto streams = collectStreamsFromValue(propVal);
+      if (!streams.empty()) {
+        descriptors.push_back({propName, std::move(streams), executionStage});
+      }
+      collectedProps.insert(propName);
+    }
+  }
+
+  // 2. Structural fallback:
+  // If no schema was available or if properties holding streams were not
+  // defined in schema, inspect decl->getProperties(). Any property whose value
+  // is an AST::Stream or a ListNode of AST::Streams is automatically collected.
+  if (portList.empty() || collectedProps.empty()) {
+    for (const auto &prop : decl->getProperties()) {
+      if (!prop)
+        continue;
+      std::string propName = prop->getName();
+      if (propName == "blocks")
+        continue;
+      if (collectedProps.count(propName))
+        continue;
+
+      auto streams = collectStreamsFromValue(prop->getValue());
+      if (!streams.empty()) {
+        std::string executionStage =
+            (propName == "streams") ? "default" : propName;
+        descriptors.push_back({propName, std::move(streams), executionStage});
+        collectedProps.insert(propName);
+      }
+    }
+  }
+
+  // 3. Nested container traversal:
+  // If an entity contains child declarations that are stream containers (e.g.
+  // state.transitions containing transition objects), collect those hierarchically.
+  for (const auto &prop : decl->getProperties()) {
+    if (!prop)
+      continue;
+    std::string propName = prop->getName();
+    if (propName == "blocks")
+      continue; // child blocks are scoped separately
+    if (propName == "streams")
+      continue;
+    ASTNode propVal = prop->getValue();
+    if (!propVal)
+      continue;
+
+    if (propVal->getNodeType() == AST::Declaration ||
+        propVal->getNodeType() == AST::ArrayDeclaration) {
+      auto childDecl = std::static_pointer_cast<DeclarationNode>(propVal);
+      auto childBlocks = getContainedStreamBlocks(childDecl, scope, tree);
+      descriptors.insert(descriptors.end(), childBlocks.begin(),
+                         childBlocks.end());
+    } else if (propVal->getNodeType() == AST::List) {
+      for (const auto &item : propVal->getChildren()) {
+        if (item && (item->getNodeType() == AST::Declaration ||
+                     item->getNodeType() == AST::ArrayDeclaration)) {
+          auto childDecl = std::static_pointer_cast<DeclarationNode>(item);
+          auto childBlocks = getContainedStreamBlocks(childDecl, scope, tree);
+          descriptors.insert(descriptors.end(), childBlocks.begin(),
+                             childBlocks.end());
+        }
+      }
+    }
+  }
+
+  return descriptors;
+}
+
 std::vector<std::shared_ptr<SystemNode>>
 ASTQuery::getSystemNodes(ASTNode tree) {
   //  Q_ASSERT(m_tree);
