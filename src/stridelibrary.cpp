@@ -3,6 +3,7 @@
 #include "stride/parser/valuenode.h"
 #include "stride/utils/astfunctions.h"
 #include "stride/utils/astquery.h"
+#include "stride/utils/cachemanager.h"
 
 #include <cassert>
 #include <filesystem>
@@ -114,6 +115,17 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
     searchPaths.push_back(m_libraryPath);
   }
 
+  auto loadOrParseFile = [](const std::filesystem::path &filePath) -> ASTNode {
+    if (auto cached = CacheManager::instance().loadCachedAST(filePath)) {
+      return cached;
+    }
+    auto parsed = AST::parseFile(filePath.string().c_str(), nullptr);
+    if (parsed) {
+      CacheManager::instance().saveCachedAST(filePath, parsed);
+    }
+    return parsed;
+  };
+
   for (const auto &includePath : searchPaths) {
     std::filesystem::path p = includePath;
     std::filesystem::path fileCandidate = p / (normalized + ".stride");
@@ -126,7 +138,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
 
     if (fileExists && dirExists) {
       // Package Root Model: load barrel file + directory sub-modules
-      auto fileTree = AST::parseFile(fileCandidate.string().c_str(), nullptr);
+      auto fileTree = loadOrParseFile(fileCandidate);
       if (fileTree) {
         auto packageNodes = ASTQuery::getPackageNodes(fileTree);
         std::vector<std::string> pkgSegs;
@@ -178,7 +190,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
       }
       break;
     } else if (fileExists) {
-      auto fileTree = AST::parseFile(fileCandidate.string().c_str(), nullptr);
+      auto fileTree = loadOrParseFile(fileCandidate);
       if (fileTree) {
         auto packageNodes = ASTQuery::getPackageNodes(fileTree);
         std::vector<std::string> pkgSegs;

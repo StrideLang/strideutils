@@ -1,6 +1,7 @@
 #include "stride/utils/astfunctions.h"
 #include "stride/utils/astquery.h"
 #include "stride/utils/astruntime.h"
+#include "stride/utils/cachemanager.h"
 #include "stride/utils/logger.h"
 #include "stride/utils/stridelibrary.h"
 
@@ -55,6 +56,10 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
 
   if (!std::filesystem::exists(path) || !std::filesystem::is_directory(path))
     return {};
+
+  if (CacheManager::instance().loadCachedDirectory(path, nodes)) {
+    return nodes;
+  }
 
   for (auto const &dir_entry : std::filesystem::directory_iterator{path}) {
     if (dir_entry.is_regular_file() &&
@@ -111,6 +116,10 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
         }
       }
     }
+  }
+
+  if (!nodes.empty()) {
+    CacheManager::instance().saveCachedDirectory(path, nodes);
   }
 
   return nodes;

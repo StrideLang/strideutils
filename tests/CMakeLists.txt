@@ -7,9 +7,13 @@ set(STRIDEUTILS_TEST_SRC
   astfunctions_tests.cpp
   astquery_statemachine_test.cpp
   logger_tests.cpp
+  cache_tests.cpp
 )
 
 add_executable(strideutils_tests main.cpp ${STRIDEUTILS_TEST_SRC})
+
+set_property(TARGET strideutils_tests PROPERTY CXX_STANDARD 20)
+set_property(TARGET strideutils_tests PROPERTY CXX_STANDARD_REQUIRED ON)
 
 target_link_libraries(strideutils_tests PRIVATE StrideUtils GTest::gtest_main)
 

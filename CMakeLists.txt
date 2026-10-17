@@ -8,6 +8,8 @@ set(STRIDEUTILS_SRC
   src/astvalidation.cpp
   src/stridelibrary.cpp
   src/logger.cpp
+  src/zpp_ast_serializer.cpp
+  src/cachemanager.cpp
 )
 
 set(STRIDEUTILS_HEADERS
@@ -17,12 +19,15 @@ set(STRIDEUTILS_HEADERS
   include/stride/utils/astvalidation.h
   include/stride/utils/stridelibrary.h
   include/stride/utils/logger.h
+  include/stride/utils/iastserializer.h
+  include/stride/utils/cacheenvelope.h
+  include/stride/utils/cachemanager.h
 )
 
 add_library(StrideUtils ${STRIDEUTILS_SRC} ${STRIDEUTILS_HEADERS})
 
 set_property(TARGET StrideUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_property(TARGET StrideUtils PROPERTY CXX_STANDARD 17)
+set_property(TARGET StrideUtils PROPERTY CXX_STANDARD 20)
 set_property(TARGET StrideUtils PROPERTY CXX_STANDARD_REQUIRED ON)
 
 target_include_directories(StrideUtils PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
