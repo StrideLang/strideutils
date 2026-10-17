@@ -769,6 +769,12 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       if (newValue) {
         stream->setLeft(newValue);
       }
+    } else if (stream->getLeft()->getNodeType() == AST::Entity) {
+      std::shared_ptr<ValueNode> newValue =
+          ASTFunctions::resolveConstant(stream->getLeft(), scope, tree);
+      if (newValue) {
+        stream->setLeft(newValue);
+      }
     } else if (stream->getLeft()->getNodeType() == AST::MemberAccess) {
       std::shared_ptr<MemberAccessNode> propertyNode =
           std::static_pointer_cast<MemberAccessNode>(stream->getLeft());
