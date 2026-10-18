@@ -3,6 +3,8 @@
 #include "stride/utils/astquery.h"
 
 #include "stride/parser/strideparser.h"
+#include "stride/parser/arraynode.h"
+#include "stride/parser/rangenode.h"
 
 #include <algorithm>
 #include <iostream>
@@ -384,81 +386,33 @@ void ASTValidation::validateTypesForDeclaration(
         ASTNode portValue = port->getValue();
 
         if (portValue) {
-          for (const auto &validType : portTypesList) {
-            // Validate constraints
-            if (validType->getNodeType() == AST::Declaration) {
-              auto constrainDecl =
-                  std::static_pointer_cast<DeclarationNode>(validType);
+          bool portExpectsList = portExpectsListType(portTypesList);
+          bool valueIsCollection = isCollectionNode(
+              portValue, scopeStack, tree, decl->getNamespaceList(),
+              currentFramework);
 
-              if (constrainDecl->getEntityType() == "constrainedInt") {
-                validateConstrainedInt(constrainDecl, declaration, portName,
-                                       portValue, errors);
-              }
-              if (constrainDecl->getEntityType() == "constrainedReal") {
-                validateConstrainedReal(constrainDecl, declaration, portName,
-                                        portValue, errors);
-              }
-              if (constrainDecl->getEntityType() == "constrainedString") {
-                validateConstrainedString(constrainDecl, declaration, portName,
-                                          portValue, errors);
-              }
-              if (constrainDecl->getEntityType() == "constrainedList") {
-                validateConstrainedList(constrainDecl, declaration, portName,
-                                        portValue, errors, scopeStack, tree, {},
-                                        currentFramework);
-              }
-            }
-          }
-
-          bool typeIsValid = false;
-          std::string failedType;
-          std::vector<std::string> validTypeNames = getValidTypeNames(
-              portTypesList, scopeStack, tree, {}, currentFramework);
-          { // Validate type names
-            if (std::find(validTypeNames.begin(), validTypeNames.end(), "") ==
-                validTypeNames.end()) {
-              if (portValue->getNodeType() == AST::List) {
-                typeIsValid = true;
-                for (const auto &child : portValue->getChildren()) {
-                  auto typeName = getTypeName(child, scopeStack, tree, {},
-                                              currentFramework);
-                  bool thisTypeIsValid = false;
-                  for (const auto &validTypeName : validTypeNames) {
-                    if (validTypeName == typeName) {
-                      thisTypeIsValid = true;
-                      break;
-                    }
-                  }
-                  if (!thisTypeIsValid) {
-                    failedType += typeName + " ";
-                  }
-                  typeIsValid &= thisTypeIsValid;
-                }
-              } else {
-                auto typeName = getTypeName(portValue, scopeStack, tree, {},
-                                            currentFramework);
-                for (const auto &validTypeName : validTypeNames) {
-                  if (validTypeName == typeName || validTypeName == "") {
-                    typeIsValid = true;
-                    break;
-                  }
-                  failedType = typeName;
-                }
-              }
-
-            } else { // Catch all for old behavior
-              typeIsValid = true;
-            }
-          }
-          if (!typeIsValid) {
+          if (portExpectsList && !valueIsCollection) {
+            // Port expects a list, but received a scalar
             LangError error;
             error.type = LangError::InvalidPortType;
             error.lineNumber = port->getLine();
             error.errorTokens.push_back(blockType);
             error.errorTokens.push_back(portName);
-            error.errorTokens.push_back(failedType);
-            //                                error.errorTokens.push_back(typeNames[0]);
-            //                                //FIXME mark which entry fails
+            error.errorTokens.push_back(
+                getTypeName(portValue, scopeStack, tree, {}, currentFramework));
+            error.errorTokens.push_back("_List");
+            error.filename = port->getFilename();
+            errors.push_back(error);
+          } else if (!portExpectsList && valueIsCollection) {
+            // Port expects a scalar, but received a collection
+            LangError error;
+            error.type = LangError::InvalidPortType;
+            error.lineNumber = port->getLine();
+            error.errorTokens.push_back(blockType);
+            error.errorTokens.push_back(portName);
+            error.errorTokens.push_back("_List");
+            std::vector<std::string> validTypeNames = getValidTypeNames(
+                portTypesList, scopeStack, tree, {}, currentFramework);
             std::string validTypesList;
             for (const auto &type : validTypeNames) {
               validTypesList += type + ",";
@@ -470,6 +424,85 @@ void ASTValidation::validateTypesForDeclaration(
             error.errorTokens.push_back(validTypesList);
             error.filename = port->getFilename();
             errors.push_back(error);
+          } else if (portExpectsList && valueIsCollection) {
+            // Both agree it's a collection. Validate list constraints
+            for (const auto &validType : portTypesList) {
+              if (validType->getNodeType() == AST::Declaration) {
+                auto constrainDecl =
+                    std::static_pointer_cast<DeclarationNode>(validType);
+                if (constrainDecl->getEntityType() == "constrainedList") {
+                  validateConstrainedList(constrainDecl, declaration, portName,
+                                          portValue, errors, scopeStack, tree,
+                                          {}, currentFramework);
+                }
+              }
+            }
+          } else {
+            // Both agree it's a scalar.
+            // 1. Validate scalar constraints (int, real, string)
+            for (const auto &validType : portTypesList) {
+              if (validType->getNodeType() == AST::Declaration) {
+                auto constrainDecl =
+                    std::static_pointer_cast<DeclarationNode>(validType);
+
+                if (constrainDecl->getEntityType() == "constrainedInt") {
+                  validateConstrainedInt(constrainDecl, declaration, portName,
+                                         portValue, errors);
+                }
+                if (constrainDecl->getEntityType() == "constrainedReal") {
+                  validateConstrainedReal(constrainDecl, declaration, portName,
+                                          portValue, errors);
+                }
+                if (constrainDecl->getEntityType() == "constrainedString") {
+                  validateConstrainedString(constrainDecl, declaration,
+                                            portName, portValue, errors);
+                }
+                if (constrainDecl->getEntityType() == "constrainedEntity") {
+                  validateConstrainedEntity(constrainDecl, declaration,
+                                            portName, portValue, errors,
+                                            scopeStack, tree,
+                                            decl->getNamespaceList(),
+                                            currentFramework);
+                }
+              }
+            }
+
+            // 2. Validate scalar type names
+            std::vector<std::string> validTypeNames = getValidTypeNames(
+                portTypesList, scopeStack, tree, {}, currentFramework);
+
+            bool typeIsValid = false;
+            std::string actualType = getTypeName(
+                portValue, scopeStack, tree, {}, currentFramework);
+
+            if (std::find(validTypeNames.begin(), validTypeNames.end(),
+                          "_Any") != validTypeNames.end()) {
+              typeIsValid = true;
+            } else {
+              typeIsValid = matchesAllowedType(portValue, validTypeNames,
+                                               scopeStack, tree, {},
+                                               currentFramework);
+            }
+
+            if (!typeIsValid) {
+              LangError error;
+              error.type = LangError::InvalidPortType;
+              error.lineNumber = port->getLine();
+              error.errorTokens.push_back(blockType);
+              error.errorTokens.push_back(portName);
+              error.errorTokens.push_back(actualType);
+              std::string validTypesList;
+              for (const auto &type : validTypeNames) {
+                validTypesList += type + ",";
+              }
+              if (validTypesList.size() > 0) {
+                validTypesList =
+                    validTypesList.substr(0, validTypesList.size() - 1);
+              }
+              error.errorTokens.push_back(validTypesList);
+              error.filename = port->getFilename();
+              errors.push_back(error);
+            }
           }
         }
       }
@@ -497,6 +530,7 @@ void ASTValidation::validateTypesForDeclaration(
       std::vector<LangError> internalErrors;
       validateTypes(property->getValue(), internalErrors, scopeStack, tree,
                     decl->getNamespaceList(), frameworkName, processedNodes);
+      errors.insert(errors.end(), internalErrors.begin(), internalErrors.end());
     }
   }
 }
@@ -736,43 +770,55 @@ void ASTValidation::validateConstrainedList(
     ASTNode tree, std::vector<std::string> parentNamespace,
     std::string currentFramework) {
 
+  int collSize =
+      getCollectionSize(portValue, scopeStack, tree, currentFramework);
+
+  auto maximumNode = constrainDecl->getPropertyValue("maxItems");
+  if (maximumNode && maximumNode->getNodeType() == AST::Int) {
+    int maxVal =
+        std::static_pointer_cast<ValueNode>(maximumNode)->getIntValue();
+    if (collSize < 0) {
+      LOG_WARN() << "Warning: Cannot evaluate array/slice size at compile time "
+                    "for maxItems constraint validation on property '"
+                 << portName << "' in " << declaration->getEntityType()
+                 << std::endl;
+    } else if (collSize > maxVal) {
+      LangError error;
+      error.lineNumber = portValue->getLine();
+      error.filename = portValue->getFilename();
+      error.type = LangError::ConstraintFail;
+      error.errorTokens.push_back(declaration->getEntityType());
+      error.errorTokens.push_back(portName);
+      error.errorTokens.push_back(AST::toText(constrainDecl));
+      error.errorTokens.push_back(AST::toText(portValue));
+      errors.push_back(error);
+    }
+  }
+
+  auto minimumNode = constrainDecl->getPropertyValue("minItems");
+  if (minimumNode && minimumNode->getNodeType() == AST::Int) {
+    int minVal =
+        std::static_pointer_cast<ValueNode>(minimumNode)->getIntValue();
+    if (collSize < 0) {
+      LOG_WARN() << "Warning: Cannot evaluate array/slice size at compile time "
+                    "for minItems constraint validation on property '"
+                 << portName << "' in " << declaration->getEntityType()
+                 << std::endl;
+    } else if (collSize < minVal) {
+      LangError error;
+      error.lineNumber = portValue->getLine();
+      error.filename = portValue->getFilename();
+      error.type = LangError::ConstraintFail;
+      error.errorTokens.push_back(declaration->getEntityType());
+      error.errorTokens.push_back(portName);
+      error.errorTokens.push_back(AST::toText(constrainDecl));
+      error.errorTokens.push_back(AST::toText(portValue));
+      errors.push_back(error);
+    }
+  }
+
   if (portValue->getNodeType() == AST::List) {
-    if (auto maximumNode = constrainDecl->getPropertyValue("maxItems")) {
-      if (maximumNode->getNodeType() == AST::Int) {
-        auto value =
-            std::static_pointer_cast<ValueNode>(maximumNode)->getIntValue();
-        if (portValue->getChildren().size() > value) {
-          LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
-          error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getEntityType());
-          error.errorTokens.push_back(portName);
-          error.errorTokens.push_back(AST::toText(constrainDecl));
-          error.errorTokens.push_back(AST::toText(portValue));
-          errors.push_back(error);
-        }
-      }
-    }
-    if (auto minimumNode = constrainDecl->getPropertyValue("minItems")) {
-      if (minimumNode->getNodeType() == AST::Int) {
-        auto value =
-            std::static_pointer_cast<ValueNode>(minimumNode)->getIntValue();
-        if (portValue->getChildren().size() < value) {
-          LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
-          error.type = LangError::ConstraintFail;
-          error.errorTokens.push_back(declaration->getEntityType());
-          error.errorTokens.push_back(portName);
-          error.errorTokens.push_back(AST::toText(constrainDecl));
-          error.errorTokens.push_back(AST::toText(portValue));
-          errors.push_back(error);
-        }
-      }
-    }
     if (auto uniqueNode = constrainDecl->getPropertyValue("uniqueItems")) {
-      // All items in list must be unique
       if (uniqueNode->getNodeType() == AST::Switch &&
           std::static_pointer_cast<ValueNode>(uniqueNode)->getSwitchValue() ==
               true) {
@@ -800,58 +846,126 @@ void ASTValidation::validateConstrainedList(
         }
       }
     }
-    if (auto allowedNode = constrainDecl->getPropertyValue("allowed")) {
-      if (allowedNode->getNodeType() == AST::List) {
-        // Empty list means anything is allowed, so no need to check
-        if (allowedNode->getChildren().size() > 0) {
-          auto allowedTypes = allowedNode->getChildren();
-          std::vector<ASTNode> failed;
-          for (const auto &node : portValue->getChildren()) {
-            auto validTypes =
-                getValidTypeNames(allowedTypes, scopeStack, tree,
-                                  parentNamespace, currentFramework);
-            if (node->getNodeType() == AST::Declaration) {
-              auto constraintDecl =
-                  std::static_pointer_cast<DeclarationNode>(node);
+  }
 
-            } else if (node->getNodeType() == AST::Entity) {
-              auto blockName =
-                  std::static_pointer_cast<EntityNode>(node)->getName();
-              auto decl = ASTQuery::findDeclarationByName(blockName, scopeStack,
-                                                          tree, parentNamespace,
-                                                          currentFramework);
-              bool checkFailed = false;
-              if (!decl) {
-                checkFailed = true;
-              } else {
-                auto declType = decl->getEntityType();
-                auto typeDeclaration = ASTQuery::findTypeDeclarationByName(
-                    declType, scopeStack, tree, parentNamespace,
-                    currentFramework);
+  auto allowedNode = constrainDecl->getPropertyValue("anyOf");
+  if (!allowedNode) {
+    allowedNode = constrainDecl->getPropertyValue("allowed");
+  }
+
+  if (allowedNode && allowedNode->getNodeType() == AST::List) {
+    if (allowedNode->getChildren().size() > 0) {
+      auto allowedTypes = allowedNode->getChildren();
+      auto validTypes = getValidTypeNames(allowedTypes, scopeStack, tree,
+                                          parentNamespace, currentFramework);
+
+      if (portValue->getNodeType() == AST::List) {
+        for (const auto &node : portValue->getChildren()) {
+          if (!matchesAllowedType(node, validTypes, scopeStack, tree,
+                                  parentNamespace, currentFramework)) {
+            LangError error;
+            error.lineNumber = portValue->getLine();
+            error.filename = portValue->getFilename();
+            error.type = LangError::ConstraintFail;
+            error.errorTokens.push_back(declaration->getEntityType());
+            error.errorTokens.push_back(AST::toText(allowedNode));
+            error.errorTokens.push_back(AST::toText(node));
+            error.errorTokens.push_back(AST::toText(portValue));
+            errors.push_back(error);
+          }
+        }
+      } else {
+        // portValue is an array slice or bundle
+        std::string name = ASTQuery::getNodeName(portValue);
+        std::vector<std::string> namespaces = portValue->getNamespaceList();
+        namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                          parentNamespace.end());
+        auto foundDecl = ASTQuery::findDeclarationByName(
+            name, scopeStack, tree, namespaces, currentFramework);
+        if (foundDecl) {
+          auto typeDecl = ASTQuery::findTypeDeclaration(
+              foundDecl, scopeStack, tree, currentFramework);
+          if (!typeDecl) {
+            typeDecl = ASTQuery::findTypeDeclarationByName(
+                foundDecl->getEntityType(), scopeStack, tree, parentNamespace,
+                currentFramework);
+          }
+          bool matched = false;
+          if (std::find(validTypes.begin(), validTypes.end(), "_Any") !=
+              validTypes.end()) {
+            matched = true;
+          } else if (typeDecl) {
+            if (std::find(validTypes.begin(), validTypes.end(),
+                          typeDecl->getName()) != validTypes.end()) {
+              matched = true;
+            } else {
+              auto inherited =
+                  ASTQuery::getInheritedTypes(typeDecl, scopeStack, tree);
+              for (const auto &inh : inherited) {
                 if (std::find(validTypes.begin(), validTypes.end(),
-                              typeDeclaration->getName()) == validTypes.end()) {
-
-                  checkFailed = true;
+                              inh->getName()) != validTypes.end()) {
+                  matched = true;
+                  break;
                 }
-              }
-              if (checkFailed) {
-
-                LangError error;
-                error.lineNumber = portValue->getLine();
-                error.filename = portValue->getFilename();
-                error.type = LangError::ConstraintFail;
-                error.errorTokens.push_back(declaration->getEntityType());
-                error.errorTokens.push_back(AST::toText(allowedNode));
-                error.errorTokens.push_back(AST::toText(node));
-                error.errorTokens.push_back(AST::toText(portValue));
-                errors.push_back(error);
               }
             }
           }
+          if (!matched) {
+            LangError error;
+            error.lineNumber = portValue->getLine();
+            error.filename = portValue->getFilename();
+            error.type = LangError::ConstraintFail;
+            error.errorTokens.push_back(declaration->getEntityType());
+            error.errorTokens.push_back(AST::toText(allowedNode));
+            error.errorTokens.push_back(AST::toText(portValue));
+            error.errorTokens.push_back(AST::toText(portValue));
+            errors.push_back(error);
+          }
         }
-      } else if (allowedNode->getNodeType() != AST::None) {
-        LOG_ERROR() << "ERROR expecting list or none for allowed in constrainedList"
-            << std::endl;
+      }
+    }
+  } else if (allowedNode && allowedNode->getNodeType() != AST::None) {
+    LOG_ERROR()
+        << "ERROR expecting list or none for allowed/anyOf in constrainedList"
+        << std::endl;
+  }
+}
+
+void ASTValidation::validateConstrainedEntity(
+    std::shared_ptr<DeclarationNode> constrainDecl,
+    std::shared_ptr<DeclarationNode> declaration, std::string portName,
+    ASTNode portValue, std::vector<LangError> &errors, ScopeStack scopeStack,
+    ASTNode tree, std::vector<std::string> parentNamespace,
+    std::string currentFramework) {
+  if (!constrainDecl || !portValue) {
+    return;
+  }
+  auto anyOfNode = constrainDecl->getPropertyValue("anyOf");
+  if (!anyOfNode) {
+    anyOfNode = constrainDecl->getPropertyValue("allowed");
+  }
+  if (!anyOfNode) {
+    return;
+  }
+  std::vector<ASTNode> allowedTypes;
+  if (anyOfNode->getNodeType() == AST::List) {
+    allowedTypes = anyOfNode->getChildren();
+  } else {
+    allowedTypes.push_back(anyOfNode);
+  }
+  for (const auto &typeNode : allowedTypes) {
+    if (typeNode->getNodeType() == AST::Declaration) {
+      auto subDecl = std::static_pointer_cast<DeclarationNode>(typeNode);
+      if (subDecl->getEntityType() == "constrainedInt" &&
+          portValue->getNodeType() == AST::Int) {
+        validateConstrainedInt(subDecl, declaration, portName, portValue, errors);
+      } else if (subDecl->getEntityType() == "constrainedReal" &&
+                 (portValue->getNodeType() == AST::Real ||
+                  portValue->getNodeType() == AST::Int)) {
+        validateConstrainedReal(subDecl, declaration, portName, portValue, errors);
+      } else if (subDecl->getEntityType() == "constrainedString" &&
+                 portValue->getNodeType() == AST::String) {
+        validateConstrainedString(subDecl, declaration, portName, portValue, errors);
       }
     }
   }
@@ -861,6 +975,9 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
                                        ASTNode tree,
                                        std::vector<std::string> parentNamespace,
                                        std::string currentFramework) {
+  if (!child) {
+    return std::string();
+  }
   if (child->getNodeType() == AST::Declaration ||
       child->getNodeType() == AST::ArrayDeclaration) {
     auto typeDeclaration = ASTQuery::findTypeDeclaration(
@@ -871,13 +988,18 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     }
   } else if (child->getNodeType() == AST::Entity ||
              child->getNodeType() == AST::Array) {
+    std::vector<std::string> namespaces = child->getNamespaceList();
+    namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                      parentNamespace.end());
     auto decl = ASTQuery::findDeclarationByName(
         ASTQuery::getNodeName(child), scopeStack, tree,
-        child->getNamespaceList(), currentFramework);
+        namespaces, currentFramework);
     if (decl) {
       auto typeDeclaration = ASTQuery::findTypeDeclaration(
           decl, scopeStack, tree, currentFramework);
-      return typeDeclaration->getName();
+      if (typeDeclaration) {
+        return typeDeclaration->getName();
+      }
     }
     return std::string();
   } else if (child->getNodeType() == AST::String) {
@@ -892,6 +1014,10 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     return std::string("_MemberAccess");
   } else if (child->getNodeType() == AST::None) {
     return std::string("_NoneLiteral");
+  } else if (child->getNodeType() == AST::List) {
+    return std::string("_List");
+  } else if (child->getNodeType() == AST::Stream) {
+    return std::string("_StreamType");
   }
   return std::string();
 }
@@ -907,12 +1033,23 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
       validTypeNames.push_back(typeCode);
     } else if (validType->getNodeType() == AST::Entity) {
       auto blockNode = std::static_pointer_cast<EntityNode>(validType);
-      std::shared_ptr<DeclarationNode> declaration =
-          ASTQuery::findDeclarationByName(blockNode->getName(), scopeStack,
-                                          tree);
-      if (declaration) {
-        std::string validTypeName = declaration->getName();
-        validTypeNames.push_back(validTypeName);
+      if (blockNode->getName() == "_Any") {
+        validTypeNames.push_back("_Any");
+      } else if (blockNode->getName() == "_List") {
+        validTypeNames.push_back("_List");
+      } else {
+        std::vector<std::string> namespaces = blockNode->getNamespaceList();
+        namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                          parentNamespace.end());
+        std::shared_ptr<DeclarationNode> declaration =
+            ASTQuery::findDeclarationByName(blockNode->getName(), scopeStack,
+                                            tree, namespaces, currentFramework);
+        if (declaration) {
+          std::string validTypeName = declaration->getName();
+          validTypeNames.push_back(validTypeName);
+        } else {
+          validTypeNames.push_back(blockNode->getName());
+        }
       }
     } else if (validType->getNodeType() == AST::Declaration) {
       auto constrainDecl = std::static_pointer_cast<DeclarationNode>(validType);
@@ -928,9 +1065,256 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
         validTypeNames.push_back("_StringLiteral");
       }
       if (constrainDecl->getEntityType() == "constrainedList") {
-        validTypeNames.push_back(""); // FIXME define list type
+        validTypeNames.push_back("_List");
+      }
+      if (constrainDecl->getEntityType() == "constrainedEntity") {
+        auto anyOfNode = constrainDecl->getPropertyValue("anyOf");
+        if (!anyOfNode) {
+          anyOfNode = constrainDecl->getPropertyValue("allowed");
+        }
+        if (anyOfNode) {
+          std::vector<ASTNode> anyOfList;
+          if (anyOfNode->getNodeType() == AST::List) {
+            anyOfList = anyOfNode->getChildren();
+          } else {
+            anyOfList.push_back(anyOfNode);
+          }
+          auto subTypes = getValidTypeNames(anyOfList, scopeStack, tree,
+                                            parentNamespace, currentFramework);
+          validTypeNames.insert(validTypeNames.end(), subTypes.begin(),
+                                subTypes.end());
+        }
       }
     }
   }
   return validTypeNames;
+}
+
+bool ASTValidation::isCollectionNode(
+    ASTNode node, const ScopeStack &scopeStack, ASTNode tree,
+    const std::vector<std::string> &parentNamespace,
+    const std::string &currentFramework) {
+  if (!node) {
+    return false;
+  }
+  if (node->getNodeType() == AST::List) {
+    return true;
+  }
+  if (node->getNodeType() == AST::Array) {
+    auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
+    if (arrayNode->index()) {
+      for (const auto &idx : arrayNode->index()->getChildren()) {
+        if (idx->getNodeType() == AST::Range) {
+          return true; // Array slice, e.g. Sig[0:8]
+        }
+      }
+    }
+    return false; // Single element access, e.g. Sig[1] -> scalar
+  }
+  if (node->getNodeType() == AST::Entity) {
+    auto entityNode = std::static_pointer_cast<EntityNode>(node);
+    std::vector<std::string> namespaces = entityNode->getNamespaceList();
+    namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                      parentNamespace.end());
+    auto decl = ASTQuery::findDeclarationByName(
+        entityNode->getName(), scopeStack, tree, namespaces, currentFramework);
+    if (decl && decl->getNodeType() == AST::ArrayDeclaration) {
+      return true; // Full array bundle reference, e.g. Sig -> collection
+    }
+    return false;
+  }
+  if (node->getNodeType() == AST::ArrayDeclaration) {
+    return true;
+  }
+  return false;
+}
+
+bool ASTValidation::portExpectsListType(
+    const std::vector<ASTNode> &portTypesList) {
+  for (const auto &validType : portTypesList) {
+    if (validType->getNodeType() == AST::Declaration) {
+      auto constrainDecl = std::static_pointer_cast<DeclarationNode>(validType);
+      if (constrainDecl->getEntityType() == "constrainedList") {
+        return true;
+      }
+    } else if (validType->getNodeType() == AST::Entity) {
+      auto entityNode = std::static_pointer_cast<EntityNode>(validType);
+      if (entityNode->getName() == "_List") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+int ASTValidation::getCollectionSize(ASTNode node, const ScopeStack &scopeStack,
+                                     ASTNode tree,
+                                     const std::string &currentFramework) {
+  if (!node) {
+    return -1;
+  }
+  if (node->getNodeType() == AST::List) {
+    return static_cast<int>(node->getChildren().size());
+  }
+  if (node->getNodeType() == AST::Array) {
+    auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
+    if (arrayNode->index()) {
+      auto indices = arrayNode->index()->getChildren();
+      if (!indices.empty() && indices[0]->getNodeType() == AST::Range) {
+        auto range = std::static_pointer_cast<RangeNode>(indices[0]);
+        if (range->startIndex()->getNodeType() == AST::Int &&
+            range->endIndex()->getNodeType() == AST::Int) {
+          int start =
+              std::static_pointer_cast<ValueNode>(range->startIndex())
+                  ->getIntValue();
+          int end =
+              std::static_pointer_cast<ValueNode>(range->endIndex())
+                  ->getIntValue();
+          if (end >= start) {
+            return (end - start) + 1; // inclusive range e.g. 0:8 -> 9 items
+          }
+        }
+      }
+    }
+    return -1; // dynamic or unknown
+  }
+  if (node->getNodeType() == AST::Entity) {
+    auto entityNode = std::static_pointer_cast<EntityNode>(node);
+    auto decl = ASTQuery::findDeclarationByName(
+        entityNode->getName(), scopeStack, tree,
+        entityNode->getNamespaceList(), currentFramework);
+    if (decl && decl->getNodeType() == AST::ArrayDeclaration) {
+      auto arrayIndex = decl->getArrayIndex();
+      if (arrayIndex && arrayIndex->index()) {
+        auto indices = arrayIndex->index()->getChildren();
+        if (!indices.empty() && indices[0]->getNodeType() == AST::Int) {
+          return std::static_pointer_cast<ValueNode>(indices[0])->getIntValue();
+        }
+      }
+    }
+    return -1; // dynamic or unknown
+  }
+  return -1;
+}
+
+bool ASTValidation::matchesAllowedType(
+    ASTNode element, const std::vector<std::string> &validTypes,
+    ScopeStack scopeStack, ASTNode tree,
+    std::vector<std::string> parentNamespace, std::string currentFramework) {
+  if (!element) {
+    return false;
+  }
+
+  // 1. Check _Any wildcard
+  if (std::find(validTypes.begin(), validTypes.end(), "_Any") !=
+      validTypes.end()) {
+    // _Any matches any scalar element
+    if (!isCollectionNode(element, scopeStack, tree, parentNamespace,
+                          currentFramework)) {
+      return true;
+    }
+  }
+
+  // 2. Literals and built-in AST types
+  if (element->getNodeType() == AST::String) {
+    return std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") !=
+           validTypes.end();
+  }
+  if (element->getNodeType() == AST::Int) {
+    return std::find(validTypes.begin(), validTypes.end(), "_IntLiteral") !=
+           validTypes.end();
+  }
+  if (element->getNodeType() == AST::Real) {
+    return std::find(validTypes.begin(), validTypes.end(), "_RealLiteral") !=
+           validTypes.end();
+  }
+  if (element->getNodeType() == AST::Switch) {
+    return std::find(validTypes.begin(), validTypes.end(), "_SwitchLiteral") !=
+           validTypes.end();
+  }
+  if (element->getNodeType() == AST::None) {
+    return std::find(validTypes.begin(), validTypes.end(), "_NoneLiteral") !=
+           validTypes.end();
+  }
+  if (element->getNodeType() == AST::Stream) {
+    return std::find(validTypes.begin(), validTypes.end(), "_StreamType") !=
+           validTypes.end();
+  }
+  if (element->getNodeType() == AST::List) {
+    return std::find(validTypes.begin(), validTypes.end(), "_List") !=
+           validTypes.end();
+  }
+
+  // 3. Declarations (inline declaration or array declaration)
+  if (element->getNodeType() == AST::Declaration ||
+      element->getNodeType() == AST::ArrayDeclaration) {
+    auto decl = std::static_pointer_cast<DeclarationNode>(element);
+    auto typeDecl =
+        ASTQuery::findTypeDeclaration(decl, scopeStack, tree, currentFramework);
+    if (!typeDecl) {
+      typeDecl = ASTQuery::findTypeDeclarationByName(
+          decl->getEntityType(), scopeStack, tree, parentNamespace,
+          currentFramework);
+    }
+    if (typeDecl) {
+      if (std::find(validTypes.begin(), validTypes.end(),
+                    typeDecl->getName()) != validTypes.end()) {
+        return true;
+      }
+      auto inherited = ASTQuery::getInheritedTypes(typeDecl, scopeStack, tree);
+      for (const auto &inh : inherited) {
+        if (std::find(validTypes.begin(), validTypes.end(), inh->getName()) !=
+            validTypes.end()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // 4. Entities and Arrays (references to named declarations or type declarations)
+  if (element->getNodeType() == AST::Entity ||
+      element->getNodeType() == AST::Array) {
+    std::string name = ASTQuery::getNodeName(element);
+    std::vector<std::string> namespaces = element->getNamespaceList();
+    namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                      parentNamespace.end());
+    auto decl = ASTQuery::findDeclarationByName(
+        name, scopeStack, tree, namespaces, currentFramework);
+    if (decl) {
+      if (std::find(validTypes.begin(), validTypes.end(), decl->getName()) !=
+          validTypes.end()) {
+        return true;
+      }
+      auto typeDecl =
+          ASTQuery::findTypeDeclaration(decl, scopeStack, tree, currentFramework);
+      if (!typeDecl) {
+        typeDecl = ASTQuery::findTypeDeclarationByName(
+            decl->getEntityType(), scopeStack, tree, parentNamespace,
+            currentFramework);
+      }
+      if (typeDecl) {
+        if (std::find(validTypes.begin(), validTypes.end(),
+                      typeDecl->getName()) != validTypes.end()) {
+          return true;
+        }
+        auto inherited = ASTQuery::getInheritedTypes(typeDecl, scopeStack, tree);
+        for (const auto &inh : inherited) {
+          if (std::find(validTypes.begin(), validTypes.end(), inh->getName()) !=
+              validTypes.end()) {
+            return true;
+          }
+        }
+      }
+    } else {
+      // If no declaration found, check if the entity name itself matches a valid type
+      if (std::find(validTypes.begin(), validTypes.end(), name) !=
+          validTypes.end()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  return false;
 }

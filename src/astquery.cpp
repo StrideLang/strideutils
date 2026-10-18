@@ -75,12 +75,17 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
           return true;
         }
       }
-      for (const char *listPropName : {"anyOf", "allowed", "types"}) {
+      for (const char *listPropName :
+           {"anyOf", "allowed", "allowedTypes", "types"}) {
         auto listProp = d->getPropertyValue(listPropName);
-        if (listProp && listProp->getNodeType() == AST::List) {
-          for (const auto &c : listProp->getChildren()) {
-            if (isStreamTypeRef(c))
-              return true;
+        if (listProp) {
+          if (listProp->getNodeType() == AST::List) {
+            for (const auto &c : listProp->getChildren()) {
+              if (isStreamTypeRef(c))
+                return true;
+            }
+          } else if (isStreamTypeRef(listProp)) {
+            return true;
           }
         }
       }
@@ -124,14 +129,23 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
               ->getSwitchValue();
     }
 
-    // Check types
+    // Check types / allowedTypes
     if (!isStreamContainer) {
-      auto typesVal = propDef->getPropertyValue("types");
-      if (typesVal && typesVal->getNodeType() == AST::List) {
-        for (const auto &typeItem : typesVal->getChildren()) {
-          if (checkTypeItem(typeItem)) {
+      auto typesVal = propDef->getPropertyValue("allowedTypes");
+      if (!typesVal) {
+        typesVal = propDef->getPropertyValue("types");
+      }
+      if (typesVal) {
+        if (typesVal->getNodeType() == AST::List) {
+          for (const auto &typeItem : typesVal->getChildren()) {
+            if (checkTypeItem(typeItem)) {
+              isStreamContainer = true;
+              break;
+            }
+          }
+        } else {
+          if (checkTypeItem(typesVal)) {
             isStreamContainer = true;
-            break;
           }
         }
       }
@@ -841,14 +855,21 @@ ASTQuery::getValidTypesForPort(std::shared_ptr<DeclarationNode> typeDeclaration,
     if (name && name->getNodeType() == AST::String) {
       assert(name->getNodeType() == AST::String);
       if (name->getStringValue() == portName) {
-        ListNode *typesPort =
-            static_cast<ListNode *>(portNode->getPropertyValue("types").get());
-        if (typesPort && typesPort->getNodeType() == AST::List) {
-          for (const ASTNode &type : typesPort->getChildren()) {
-            validTypes.push_back(type);
+        ASTNode typesPort = portNode->getPropertyValue("allowedTypes");
+        if (!typesPort) {
+          typesPort = portNode->getPropertyValue("types");
+        }
+        if (typesPort) {
+          if (typesPort->getNodeType() == AST::List) {
+            for (const ASTNode &type : typesPort->getChildren()) {
+              validTypes.push_back(type);
+            }
+          } else {
+            validTypes.push_back(typesPort);
           }
         } else {
-          LOG_ERROR() << "Expecting list for types port" << std::endl;
+          LOG_ERROR() << "Expecting allowedTypes or types for port "
+                      << portName << std::endl;
         }
       }
     } else {

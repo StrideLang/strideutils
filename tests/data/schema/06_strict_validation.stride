@@ -1,0 +1,168 @@
+type SignalType {
+    typeName: "signalType"
+    properties: []
+}
+
+signalType SigSingle {}
+signalType SigBundle [8] {}
+
+type StrictTestingType {
+    typeName: "strictTesting"
+    properties: [
+        typeProperty ScalarProp {
+            name: "scalarProp"
+            allowedTypes: constrainedEntity { anyOf: [SignalType, _NoneLiteral] }
+            default: none
+            required: off
+        },
+        typeProperty ListProp {
+            name: "listProp"
+            allowedTypes: constrainedList {
+                minItems: 2
+                maxItems: 6
+                anyOf: [SignalType]
+            }
+            default: []
+            required: off
+        },
+        typeProperty AnyProp {
+            name: "anyProp"
+            allowedTypes: _Any
+            default: none
+            required: off
+        },
+        typeProperty AnyListProp {
+            name: "anyListProp"
+            allowedTypes: _List
+            default: []
+            required: off
+        },
+        typeProperty EntityUnionProp {
+            name: "entityUnionProp"
+            allowedTypes: constrainedEntity {
+                anyOf: [SignalType, _NoneLiteral]
+            }
+            default: none
+            required: off
+        }
+    ]
+}
+
+# --- Valid cases ---
+
+strictTesting V1 {
+    # scalarProp accepts scalar entity
+    scalarProp: SigSingle
+}
+
+strictTesting V2 {
+    # scalarProp accepts single-index array element
+    scalarProp: SigBundle[2]
+}
+
+strictTesting V3 {
+    # listProp accepts list of SignalType (3 items, between 2 and 6)
+    listProp: [SigSingle, SigSingle, SigSingle]
+}
+
+strictTesting V4 {
+    # listProp accepts slice SigBundle[0:4] (5 items, between 2 and 6)
+    listProp: SigBundle[0:4]
+}
+
+strictTesting V5 {
+    # anyProp accepts any scalar int
+    anyProp: 42
+}
+
+strictTesting V6 {
+    # anyProp accepts string scalar
+    anyProp: "hello"
+}
+
+strictTesting V7 {
+    # anyProp accepts indexed array element scalar
+    anyProp: SigBundle[1]
+}
+
+strictTesting V8 {
+    # anyListProp accepts unconstrained list
+    anyListProp: [1, "two", SigSingle]
+}
+
+strictTesting V9 {
+    # entityUnionProp accepts SignalType
+    entityUnionProp: SigSingle
+}
+
+strictTesting V10 {
+    # entityUnionProp accepts none
+    entityUnionProp: none
+}
+
+# --- Failure cases ---
+
+strictTesting Fail1 {
+    # Scalar port rejects list
+    scalarProp: [SigSingle, SigSingle]
+}
+
+strictTesting Fail2 {
+    # Scalar port rejects unindexed array bundle
+    scalarProp: SigBundle
+}
+
+strictTesting Fail3 {
+    # Scalar port rejects array slice
+    scalarProp: SigBundle[0:3]
+}
+
+strictTesting Fail4 {
+    # List port rejects scalar literal
+    listProp: 10
+}
+
+strictTesting Fail5 {
+    # List port rejects single-index array element (it is scalar)
+    listProp: SigBundle[1]
+}
+
+strictTesting Fail6 {
+    # List port rejects scalar entity
+    listProp: SigSingle
+}
+
+strictTesting Fail7 {
+    # List port rejects slice that violates maxItems (0:7 has 8 items > maxItems 6)
+    listProp: SigBundle[0:7]
+}
+
+strictTesting Fail8 {
+    # List port rejects slice that violates minItems (0:0 has 1 item < minItems 2)
+    listProp: SigBundle[0:0]
+}
+
+strictTesting Fail9 {
+    # anyProp (scalar) rejects list
+    anyProp: [1, 2, 3]
+}
+
+strictTesting Fail10 {
+    # anyProp (scalar) rejects array bundle
+    anyProp: SigBundle
+}
+
+strictTesting Fail11 {
+    # anyListProp (list) rejects scalar
+    anyListProp: 42
+}
+
+strictTesting Fail12 {
+    # entityUnionProp (scalar union) rejects unlisted scalar literal
+    entityUnionProp: 123
+}
+
+strictTesting Fail13 {
+    # entityUnionProp (scalar union) rejects collection/list
+    entityUnionProp: [SigSingle]
+}

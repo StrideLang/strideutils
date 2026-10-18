@@ -118,6 +118,13 @@ protected:
       ScopeStack scopeStack = ScopeStack(), ASTNode tree = nullptr,
       std::vector<std::string> parentNamespace = {},
       std::string currentFramework = "");
+  static void validateConstrainedEntity(
+      std::shared_ptr<DeclarationNode> constrainDecl,
+      std::shared_ptr<DeclarationNode> declaration, std::string portName,
+      ASTNode portValue, std::vector<LangError> &errors,
+      ScopeStack scopeStack = ScopeStack(), ASTNode tree = nullptr,
+      std::vector<std::string> parentNamespace = {},
+      std::string currentFramework = "");
   static std::string getTypeName(ASTNode child,
                                  ScopeStack scopeStack = ScopeStack(),
                                  ASTNode tree = nullptr,
@@ -128,6 +135,20 @@ protected:
       std::vector<ASTNode> portTypesList, ScopeStack scopeStack = ScopeStack(),
       ASTNode tree = nullptr, std::vector<std::string> parentNamespace = {},
       std::string currentFramework = "");
+
+  static bool isCollectionNode(ASTNode node, const ScopeStack &scopeStack,
+                               ASTNode tree,
+                               const std::vector<std::string> &parentNamespace = {},
+                               const std::string &currentFramework = "");
+  static bool portExpectsListType(const std::vector<ASTNode> &portTypesList);
+  static int getCollectionSize(ASTNode node, const ScopeStack &scopeStack,
+                               ASTNode tree,
+                               const std::string &currentFramework = "");
+  static bool matchesAllowedType(ASTNode element,
+                                 const std::vector<std::string> &validTypes,
+                                 ScopeStack scopeStack, ASTNode tree,
+                                 std::vector<std::string> parentNamespace = {},
+                                 std::string currentFramework = "");
 };
 } // namespace strd
 

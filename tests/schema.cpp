@@ -114,3 +114,55 @@ TEST(Schema, ConstrainedList) {
   EXPECT_EQ(errors[3].type, LangError::ConstraintFail);
   EXPECT_EQ(errors[3].lineNumber, 76);
 }
+
+TEST(Schema, StrictValidation) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/06_strict_validation.stride");
+  EXPECT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 13);
+  // Fail1: scalarProp rejects list
+  EXPECT_EQ(errors[0].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[0].lineNumber, 107);
+  // Fail2: scalarProp rejects unindexed array bundle
+  EXPECT_EQ(errors[1].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[1].lineNumber, 112);
+  // Fail3: scalarProp rejects array slice
+  EXPECT_EQ(errors[2].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[2].lineNumber, 117);
+  // Fail4: listProp rejects scalar literal
+  EXPECT_EQ(errors[3].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[3].lineNumber, 122);
+  // Fail5: listProp rejects single-index array element
+  EXPECT_EQ(errors[4].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[4].lineNumber, 127);
+  // Fail6: listProp rejects scalar entity
+  EXPECT_EQ(errors[5].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[5].lineNumber, 132);
+  // Fail7: listProp rejects slice violating maxItems (8 > 6)
+  EXPECT_EQ(errors[6].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[6].lineNumber, 137);
+  // Fail8: listProp rejects slice violating minItems (1 < 2)
+  EXPECT_EQ(errors[7].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[7].lineNumber, 142);
+  // Fail9: anyProp rejects list
+  EXPECT_EQ(errors[8].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[8].lineNumber, 147);
+  // Fail10: anyProp rejects array bundle
+  EXPECT_EQ(errors[9].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[9].lineNumber, 152);
+  // Fail11: anyListProp rejects scalar
+  EXPECT_EQ(errors[10].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[10].lineNumber, 157);
+  // Fail12: entityUnionProp rejects unlisted scalar literal
+  EXPECT_EQ(errors[11].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[11].lineNumber, 162);
+  // Fail13: entityUnionProp rejects collection/list
+  EXPECT_EQ(errors[12].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[12].lineNumber, 167);
+}
+
