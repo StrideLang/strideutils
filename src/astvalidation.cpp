@@ -778,10 +778,10 @@ void ASTValidation::validateConstrainedList(
     int maxVal =
         std::static_pointer_cast<ValueNode>(maximumNode)->getIntValue();
     if (collSize < 0) {
-      LOG_WARN() << "Warning: Cannot evaluate array/slice size at compile time "
-                    "for maxItems constraint validation on property '"
-                 << portName << "' in " << declaration->getEntityType()
-                 << std::endl;
+      LOG_WARNING()
+          << "Warning: Cannot evaluate array/slice size at compile time "
+             "for maxItems constraint validation on property '"
+          << portName << "' in " << declaration->getEntityType() << std::endl;
     } else if (collSize > maxVal) {
       LangError error;
       error.lineNumber = portValue->getLine();
@@ -800,10 +800,10 @@ void ASTValidation::validateConstrainedList(
     int minVal =
         std::static_pointer_cast<ValueNode>(minimumNode)->getIntValue();
     if (collSize < 0) {
-      LOG_WARN() << "Warning: Cannot evaluate array/slice size at compile time "
-                    "for minItems constraint validation on property '"
-                 << portName << "' in " << declaration->getEntityType()
-                 << std::endl;
+      LOG_WARNING()
+          << "Warning: Cannot evaluate array/slice size at compile time "
+             "for minItems constraint validation on property '"
+          << portName << "' in " << declaration->getEntityType() << std::endl;
     } else if (collSize < minVal) {
       LangError error;
       error.lineNumber = portValue->getLine();

@@ -145,4 +145,5 @@ private:
 #define LOG_DEBUG() strd::Logger::log(strd::LogLevel::DEBUG, __FILE__, __LINE__)
 #define LOG_INFO() strd::Logger::log(strd::LogLevel::INFO, __FILE__, __LINE__)
 #define LOG_WARNING() strd::Logger::log(strd::LogLevel::WARNING, __FILE__, __LINE__)
+#define LOG_WARN() LOG_WARNING()
 #define LOG_ERROR() strd::Logger::log(strd::LogLevel::ERROR, __FILE__, __LINE__)
