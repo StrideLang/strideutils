@@ -341,3 +341,165 @@ TEST(CacheManagerTests, DirectoryCachingInLoadAllInDirectory) {
   EXPECT_EQ(nodes3.size(), 3u);
   EXPECT_GE(CacheManager::instance().getStats().invalidations, 1u);
 }
+
+TEST(CacheManagerTests, BinaryPayloadCachingObjAndBitcode) {
+  ScopedCacheDir scoped;
+  auto sourceFile = scoped.testDir() / "Game.stride";
+  {
+    std::ofstream out(sourceFile);
+    out << "signal Score { default: 100 }\n";
+  }
+
+  // Simulated compiled object bytes
+  std::vector<uint8_t> mockObjBytes = {0x7F, 'E', 'L', 'F', 0x01, 0x02, 0x03, 0x04};
+  // Simulated LLVM bitcode bytes
+  std::vector<uint8_t> mockBcBytes = {'B', 'C', 0xC0, 0xDE, 0x10, 0x20, 0x30, 0x40};
+
+  std::string objTag = "jit_obj_x86_64_O2";
+  std::string bcTag = "ir_bc_O2";
+
+  // 1. Initial loads should miss
+  std::vector<uint8_t> loadedObj;
+  EXPECT_FALSE(CacheManager::instance().loadCachedBinary(
+      sourceFile, loadedObj, {}, objTag, ".obj"));
+  EXPECT_TRUE(loadedObj.empty());
+
+  std::vector<uint8_t> loadedBc;
+  EXPECT_FALSE(CacheManager::instance().loadCachedBinary(
+      sourceFile, loadedBc, {}, bcTag, ".bc"));
+  EXPECT_TRUE(loadedBc.empty());
+
+  // 2. Save both binary caches
+  EXPECT_TRUE(CacheManager::instance().saveCachedBinary(
+      sourceFile, mockObjBytes.data(), mockObjBytes.size(), {}, objTag, ".obj"));
+  EXPECT_TRUE(CacheManager::instance().saveCachedBinary(
+      sourceFile, mockBcBytes.data(), mockBcBytes.size(), {}, bcTag, ".bc"));
+
+  // 3. Subsequent loads should hit
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(
+      sourceFile, loadedObj, {}, objTag, ".obj"));
+  EXPECT_EQ(loadedObj, mockObjBytes);
+
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(
+      sourceFile, loadedBc, {}, bcTag, ".bc"));
+  EXPECT_EQ(loadedBc, mockBcBytes);
+
+  // 4. Modifying source invalidates binary caches
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  {
+    std::ofstream out(sourceFile, std::ios::trunc);
+    out << "signal Score { default: 200 }\n";
+  }
+
+  EXPECT_FALSE(CacheManager::instance().loadCachedBinary(
+      sourceFile, loadedObj, {}, objTag, ".obj"));
+  EXPECT_FALSE(CacheManager::instance().loadCachedBinary(
+      sourceFile, loadedBc, {}, bcTag, ".bc"));
+}
+
+TEST(CacheManagerTests, MicroBenchmarkASTParseVsLoadCache) {
+  ScopedCacheDir scoped;
+  auto strideFile = scoped.testDir() / "BenchmarkModule.stride";
+
+  {
+    std::ofstream out(strideFile);
+    for (int i = 0; i < 50; ++i) {
+      out << "signal Sig" << i << " { default: " << i << " }\n";
+      out << "constant Const" << i << " { value: " << (i * 10) << " }\n";
+    }
+  }
+
+  // Pre-populate cache
+  auto parsedInitial = AST::parseFile(strideFile.string().c_str());
+  ASSERT_NE(parsedInitial, nullptr);
+  ASSERT_TRUE(CacheManager::instance().saveCachedAST(strideFile, parsedInitial));
+
+  // 1. Measure raw AST parse time over 50 iterations
+  const int iterations = 50;
+  auto t0 = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iterations; ++i) {
+    auto parsed = AST::parseFile(strideFile.string().c_str());
+    ASSERT_NE(parsed, nullptr);
+  }
+  auto t1 = std::chrono::high_resolution_clock::now();
+  double parseDurationUs =
+      std::chrono::duration<double, std::micro>(t1 - t0).count() / iterations;
+
+  // 2. Measure cached AST load time over 50 iterations
+  auto t2 = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iterations; ++i) {
+    auto cached = CacheManager::instance().loadCachedAST(strideFile);
+    ASSERT_NE(cached, nullptr);
+  }
+  auto t3 = std::chrono::high_resolution_clock::now();
+  double cacheDurationUs =
+      std::chrono::duration<double, std::micro>(t3 - t2).count() / iterations;
+
+  double speedup =
+      parseDurationUs / (cacheDurationUs > 0.0 ? cacheDurationUs : 0.001);
+
+  std::cout << "\n======================================================\n";
+  std::cout << " [MICRO-BENCHMARK] StrideUtils AST Cache (" << iterations
+            << " iterations)\n";
+  std::cout << " Raw AST::parseFile:        " << parseDurationUs
+            << " us (avg)\n";
+  std::cout << " Cached loadCachedAST:      " << cacheDurationUs
+            << " us (avg)\n";
+  std::cout << " Micro-Speedup:             " << speedup << "x faster\n";
+  std::cout << "======================================================\n"
+            << std::endl;
+}
+
+TEST(CacheManagerTests, CompilerCommitAndBuildHashInvalidation) {
+  ScopedCacheDir scoped;
+  auto strideFile = scoped.testDir() / "VersionTest.stride";
+
+  {
+    std::ofstream out(strideFile);
+    out << "signal TestSig { default: 42 }\n";
+  }
+
+  // 1. Verify commit hash and build hash are populated
+  const char *commitHash = CacheManager::getCompilerCommitHash();
+  ASSERT_NE(commitHash, nullptr);
+  EXPECT_GT(std::strlen(commitHash), 0u);
+
+  uint64_t initialBuildHash = CacheManager::getCompilerBuildHash();
+  EXPECT_NE(initialBuildHash, 0u);
+
+  // 2. Save both AST and binary payload
+  auto parsed = AST::parseFile(strideFile.string().c_str());
+  ASSERT_NE(parsed, nullptr);
+  EXPECT_TRUE(CacheManager::instance().saveCachedAST(strideFile, parsed));
+
+  std::vector<uint8_t> fakeObj = {0xDE, 0xAD, 0xBE, 0xEF};
+  EXPECT_TRUE(CacheManager::instance().saveCachedBinary(
+      strideFile, fakeObj.data(), fakeObj.size(), {}, "", ".obj"));
+
+  // Verify hits
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> loadedObj;
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(strideFile, loadedObj, {}, "", ".obj"));
+  EXPECT_EQ(loadedObj, fakeObj);
+
+  // 3. Simulate a compiler binary / commit hash change using hash override
+  uint64_t simulatedNewCommitHash = initialBuildHash ^ 0xDEADBEEFCAFEBABEULL;
+  CacheManager::setCompilerBuildHashOverride(simulatedNewCommitHash);
+  EXPECT_EQ(CacheManager::getCompilerBuildHash(), simulatedNewCommitHash);
+
+  // Both AST and binary cache must invalidate due to compiler build hash mismatch!
+  EXPECT_EQ(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> rejectedObj;
+  EXPECT_FALSE(CacheManager::instance().loadCachedBinary(strideFile, rejectedObj, {}, "", ".obj"));
+
+  // 4. Restore original hash
+  CacheManager::clearCompilerBuildHashOverride();
+  EXPECT_EQ(CacheManager::getCompilerBuildHash(), initialBuildHash);
+
+  // Both hit again
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> restoredObj;
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(strideFile, restoredObj, {}, "", ".obj"));
+  EXPECT_EQ(restoredObj, fakeObj);
+}
+

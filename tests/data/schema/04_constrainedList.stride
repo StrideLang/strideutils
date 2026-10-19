@@ -17,7 +17,7 @@ type ListConstraints {
     properties: [	
         typeProperty {
 			name: "list"
-			types: [
+			allowedTypes: [
                 constrainedList {
                     minItems: 2
                     maxItems: 5
@@ -29,7 +29,7 @@ type ListConstraints {
 		}
         typeProperty {
 			name: "allowedTypes"
-			types: [
+			allowedTypes: [
                 constrainedList {
                     allowed: [
                         Allowed1, Allowed2, Allowed3

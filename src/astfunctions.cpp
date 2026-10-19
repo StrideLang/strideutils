@@ -610,12 +610,14 @@ void ASTFunctions::fillDefaultPropertiesForNode(
       }
       if (!propertySet) {
         ASTNode defaultValueNode = portDescription->getPropertyValue("default");
-        std::shared_ptr<PropertyNode> newProperty =
-            std::make_shared<PropertyNode>(
-                propertyName, defaultValueNode->deepCopy(),
-                portDescription->getFilename().data(),
-                portDescription->getLine());
-        destBlock->addProperty(newProperty);
+        if (defaultValueNode) {
+          std::shared_ptr<PropertyNode> newProperty =
+              std::make_shared<PropertyNode>(
+                  propertyName, defaultValueNode->deepCopy(),
+                  portDescription->getFilename().data(),
+                  portDescription->getLine());
+          destBlock->addProperty(newProperty);
+        }
       }
     }
   } else if (node->getNodeType() == AST::Function) {

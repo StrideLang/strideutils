@@ -82,6 +82,8 @@ public:
   // of nodes
   static std::string getNodeName(ASTNode node);
 
+  static bool isGenerator(std::shared_ptr<DeclarationNode> decl);
+
   ///// Size queries
   /// Get the number of parallel nodes implicit in node. i.e. into how many
   /// parallel streams can the node be broken up.
@@ -152,7 +154,8 @@ public:
   getModulePort(std::shared_ptr<DeclarationNode> moduleDecl, std::string name);
 
   static std::vector<std::string>
-  getModulePortNames(std::shared_ptr<DeclarationNode> entityDeclaration);
+  getModulePortNames(std::shared_ptr<DeclarationNode> entityDeclaration,
+                     const ScopeStack &scope = {}, ASTNode tree = nullptr);
 
   // Array Declarations
   static ASTNode

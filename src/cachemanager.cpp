@@ -71,7 +71,11 @@ CacheManager::CacheManager()
 
 void CacheManager::setEnabled(bool enabled) noexcept {
   std::lock_guard<std::mutex> lock(m_mutex);
-  m_enabled = enabled;
+  if (m_enabled != enabled) {
+    LOG_INFO() << "[CacheManager] Caching " << (enabled ? "ENABLED" : "DISABLED")
+               << std::endl;
+    m_enabled = enabled;
+  }
 }
 
 bool CacheManager::isEnabled() const noexcept {
@@ -164,9 +168,38 @@ uint64_t CacheManager::getFileSize(const std::filesystem::path &filePath) {
   return static_cast<uint64_t>(sz);
 }
 
+namespace {
+std::atomic<uint64_t> s_compilerBuildHashOverride{0};
+} // namespace
+
+const char *CacheManager::getCompilerCommitHash() noexcept {
+#ifdef STRIDE_GIT_COMMIT_HASH
+  return STRIDE_GIT_COMMIT_HASH;
+#else
+  return "unknown";
+#endif
+}
+
+void CacheManager::setCompilerBuildHashOverride(uint64_t hashOverride) noexcept {
+  s_compilerBuildHashOverride.store(hashOverride, std::memory_order_relaxed);
+}
+
+void CacheManager::clearCompilerBuildHashOverride() noexcept {
+  s_compilerBuildHashOverride.store(0, std::memory_order_relaxed);
+}
+
 uint64_t CacheManager::getCompilerBuildHash() noexcept {
-  static const uint64_t kBuildHash =
-      combineHash(hashString(__DATE__ " " __TIME__), 0x5354524443414348ULL);
+  uint64_t overrideVal = s_compilerBuildHashOverride.load(std::memory_order_relaxed);
+  if (overrideVal != 0) {
+    return overrideVal;
+  }
+  static const uint64_t kBuildHash = []() {
+    uint64_t h = hashString(getCompilerCommitHash());
+    if (const char *envVer = std::getenv("STRIDE_COMPILER_BUILD_HASH")) {
+      h = combineHash(h, hashString(envVer));
+    }
+    return combineHash(h, 0x5354524443414348ULL);
+  }();
   return kBuildHash;
 }
 
@@ -324,7 +357,8 @@ std::filesystem::path CacheManager::resolveCacheDirForSource(
 
 std::filesystem::path
 CacheManager::getCacheFilePath(const std::filesystem::path &sourcePath,
-                               const std::string &systemTag) const {
+                               const std::string &systemTag,
+                               const std::string &customExt) const {
   std::filesystem::path cacheDir = resolveCacheDirForSource(sourcePath);
   std::error_code ec;
   bool isDir = std::filesystem::is_directory(sourcePath, ec);
@@ -346,8 +380,175 @@ CacheManager::getCacheFilePath(const std::filesystem::path &sourcePath,
   if (!systemTag.empty()) {
     baseName += "." + sanitizeTag(systemTag);
   }
-  baseName += kCacheExtension;
+  baseName += customExt.empty() ? std::string(kCacheExtension) : customExt;
   return cacheDir / baseName;
+}
+
+bool CacheManager::loadCachedBinary(
+    const std::filesystem::path &sourceFile,
+    std::vector<uint8_t> &outBytes,
+    const std::vector<std::filesystem::path> &dependencies,
+    const std::string &systemTag,
+    const std::string &customExt) {
+  if (!isEnabled() || isForceRecompile()) {
+    return false;
+  }
+
+  std::error_code ec;
+  if (!std::filesystem::exists(sourceFile, ec)) {
+    return false;
+  }
+
+  std::filesystem::path cacheFile =
+      getCacheFilePath(sourceFile, systemTag, customExt);
+  if (!std::filesystem::exists(cacheFile, ec)) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.misses++;
+    return false;
+  }
+
+  std::ifstream in(cacheFile, std::ios::binary);
+  if (!in.is_open()) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.misses++;
+    return false;
+  }
+
+  CacheEnvelopeHeader header{};
+  in.read(reinterpret_cast<char *>(&header), sizeof(header));
+  if (!in.good() || !header.hasValidMagic()) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.invalidations++;
+    m_stats.misses++;
+    return false;
+  }
+
+  const uint64_t expectedCompilerHash = getCompilerBuildHash();
+  const uint64_t expectedSystemHash = hashString(systemTag);
+  if (header.compilerBuildHash != expectedCompilerHash ||
+      header.systemConfigHash != expectedSystemHash) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.invalidations++;
+    m_stats.misses++;
+    return false;
+  }
+
+  const uint64_t curMtime = getFileMtime(sourceFile);
+  const uint64_t curSize = getFileSize(sourceFile);
+
+  bool fresh = false;
+  if (dependencies.empty() && header.sourceMtime == curMtime &&
+      header.sourceSize == curSize && curSize > 0) {
+    fresh = true;
+  } else if (header.sourceSize == curSize) {
+    uint64_t contentHash = hashFile(sourceFile);
+    for (const auto &dep : dependencies) {
+      contentHash = combineHash(contentHash, getFileMtime(dep));
+      contentHash = combineHash(contentHash, getFileSize(dep));
+    }
+    if (contentHash != 0 && contentHash == header.sourceContentHash) {
+      fresh = true;
+    }
+  }
+
+  if (!fresh) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.invalidations++;
+    m_stats.misses++;
+    return false;
+  }
+
+  outBytes.resize(static_cast<size_t>(header.payloadSize));
+  if (header.payloadSize > 0) {
+    in.read(reinterpret_cast<char *>(outBytes.data()),
+            static_cast<std::streamsize>(header.payloadSize));
+    if (static_cast<uint64_t>(in.gcount()) != header.payloadSize) {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      m_stats.invalidations++;
+      m_stats.misses++;
+      return false;
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.hits++;
+  }
+  return true;
+}
+
+bool CacheManager::saveCachedBinary(
+    const std::filesystem::path &sourceFile,
+    const void *data, size_t size,
+    const std::vector<std::filesystem::path> &dependencies,
+    const std::string &systemTag,
+    const std::string &customExt) {
+  if (!isEnabled() || !data || size == 0) {
+    return false;
+  }
+
+  std::error_code ec;
+  if (!std::filesystem::exists(sourceFile, ec)) {
+    return false;
+  }
+
+  std::filesystem::path cacheFile =
+      getCacheFilePath(sourceFile, systemTag, customExt);
+  std::filesystem::path cacheDir = cacheFile.parent_path();
+  std::filesystem::create_directories(cacheDir, ec);
+
+  uint64_t contentHash = hashFile(sourceFile);
+  for (const auto &dep : dependencies) {
+    contentHash = combineHash(contentHash, getFileMtime(dep));
+    contentHash = combineHash(contentHash, getFileSize(dep));
+  }
+
+  CacheEnvelopeHeader header{};
+  header.compilerBuildHash = getCompilerBuildHash();
+  header.systemConfigHash = hashString(systemTag);
+  header.sourceMtime = getFileMtime(sourceFile);
+  header.sourceSize = getFileSize(sourceFile);
+  header.sourceContentHash = contentHash;
+  header.serializerFourCC = 0;
+  header.serializerVersion = 0;
+  header.payloadSize = size;
+
+  static std::atomic<uint64_t> tmpSeq{0};
+  std::filesystem::path tmpFile =
+      cacheFile.string() + ".tmp." + std::to_string(tmpSeq.fetch_add(1));
+
+  {
+    std::ofstream out(tmpFile, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+      return false;
+    }
+    out.write(reinterpret_cast<const char *>(&header), sizeof(header));
+    out.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
+    out.flush();
+    if (!out.good()) {
+      out.close();
+      std::filesystem::remove(tmpFile, ec);
+      return false;
+    }
+  }
+
+  std::filesystem::rename(tmpFile, cacheFile, ec);
+  if (ec) {
+    ec.clear();
+    std::filesystem::copy_file(
+        tmpFile, cacheFile,
+        std::filesystem::copy_options::overwrite_existing, ec);
+    std::filesystem::remove(tmpFile, ec);
+    if (ec) {
+      return false;
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.writes++;
+  }
+  return true;
 }
 
 ASTNode CacheManager::loadCachedAST(

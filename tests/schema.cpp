@@ -166,3 +166,66 @@ TEST(Schema, StrictValidation) {
   EXPECT_EQ(errors[12].lineNumber, 167);
 }
 
+TEST(Schema, BlockValidation) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/07_block_validation.stride");
+  EXPECT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 4);
+  // Fail1: blockProp rejects list
+  EXPECT_EQ(errors[0].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[0].lineNumber, 57);
+  // Fail2: blockProp rejects array slice
+  EXPECT_EQ(errors[1].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[1].lineNumber, 62);
+  // Fail3: blockProp rejects integer literal
+  EXPECT_EQ(errors[2].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[2].lineNumber, 67);
+  // Fail4: blockProp rejects module declaration
+  EXPECT_EQ(errors[3].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[3].lineNumber, 72);
+}
+
+TEST(Schema, ArrayDefaultValidation) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/08_array_default_validation.stride");
+  EXPECT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 3);
+  // Fail1: element type mismatch in array default list
+  EXPECT_EQ(errors[0].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[0].lineNumber, 44);
+  // Fail2: array default list size mismatch (2 items != 4 declared)
+  EXPECT_EQ(errors[1].type, LangError::ArraySizeMismatch);
+  EXPECT_EQ(errors[1].lineNumber, 49);
+  // Fail3: scalar switch rejects list default
+  EXPECT_EQ(errors[2].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[2].lineNumber, 54);
+}
+
+TEST(Schema, GeneratorListValidation) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/09_generator_list_validation.stride");
+  EXPECT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 2);
+  // Fail1: element type mismatch in generator list
+  EXPECT_EQ(errors[0].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[0].lineNumber, 28);
+  // Fail2: generator list size mismatch (2 items != 4 declared)
+  EXPECT_EQ(errors[1].type, LangError::ArraySizeMismatch);
+  EXPECT_EQ(errors[1].lineNumber, 33);
+}
+

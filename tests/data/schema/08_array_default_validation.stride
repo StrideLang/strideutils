@@ -1,0 +1,55 @@
+type SwitchType {
+    typeName: "switch"
+    properties: [
+        typeProperty Default {
+            name: "default"
+            allowedTypes: _SwitchLiteral
+            required: off
+        }
+    ]
+}
+
+type SignalType {
+    typeName: "signal"
+    properties: [
+        typeProperty Default {
+            name: "default"
+            allowedTypes: constrainedEntity { allowed: [_IntLiteral, _RealLiteral] }
+            required: off
+        }
+    ]
+}
+
+# --- Valid cases (0 errors) ---
+
+# Valid array switch declaration with list default matching array size
+switch ValidSwArr[4] {
+    default: [off, on, off, on]
+}
+
+# Valid array switch declaration with scalar default broadcasting to all elements
+switch ValidSwBroadcast[4] {
+    default: off
+}
+
+# Valid array signal declaration with mixed int/real list default
+signal ValidSigArr[3] {
+    default: [1.0, 2, 3.5]
+}
+
+# --- Failure cases ---
+
+# Fail1: Array switch default contains non-switch literal (int 42)
+switch FailSwElemType[3] {
+    default: [off, 42, on]
+}
+
+# Fail2: Array switch default list size mismatch (2 items != 4 declared)
+switch FailSwSize[4] {
+    default: [off, on]
+}
+
+# Fail3: Scalar switch rejects list default
+switch FailScalarListDefault {
+    default: [off, on]
+}

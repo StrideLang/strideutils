@@ -3,7 +3,7 @@ type ObjType {
     properties: [	
         typeProperty {
 			name: "port"
-			types: [
+			allowedTypes: [
                 ObjType2
             ]
 			default: none

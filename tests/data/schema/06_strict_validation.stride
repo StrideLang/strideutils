@@ -11,7 +11,7 @@ type StrictTestingType {
     properties: [
         typeProperty ScalarProp {
             name: "scalarProp"
-            allowedTypes: constrainedEntity { anyOf: [SignalType, _NoneLiteral] }
+            allowedTypes: constrainedEntity { allowed: [SignalType, _NoneLiteral] }
             default: none
             required: off
         },
@@ -20,9 +20,9 @@ type StrictTestingType {
             allowedTypes: constrainedList {
                 minItems: 2
                 maxItems: 6
-                anyOf: [SignalType]
+                allowed: [SignalType]
             }
-            default: []
+            default: [SigSingle, SigSingle]
             required: off
         },
         typeProperty AnyProp {
@@ -40,7 +40,7 @@ type StrictTestingType {
         typeProperty EntityUnionProp {
             name: "entityUnionProp"
             allowedTypes: constrainedEntity {
-                anyOf: [SignalType, _NoneLiteral]
+                allowed: [SignalType, _NoneLiteral]
             }
             default: none
             required: off

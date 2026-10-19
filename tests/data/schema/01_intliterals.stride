@@ -3,13 +3,13 @@ type _Literals {
     properties: [
 		typeProperty {
 			name: "intLiteral"
-			types: [_IntLiteral]
+			allowedTypes: [_IntLiteral]
 			default: none
 			required: on
 		}		
         typeProperty {
 			name: "constrainedInt"
-			types: [
+			allowedTypes: [
                 constrainedInt {
                     minimum: 2
                     maximum: 20
@@ -20,7 +20,7 @@ type _Literals {
 		}		
         typeProperty {
 			name: "constrainedInt2"
-			types: [
+			allowedTypes: [
                 constrainedInt {
                     exclusiveMinimum: 2
                     exclusiveMaximum: 20
@@ -31,7 +31,7 @@ type _Literals {
 		}	
         typeProperty {
 			name: "constrainedIntMult"
-			types: [
+			allowedTypes: [
                 constrainedInt {
                     multipleOf: 4
                 }

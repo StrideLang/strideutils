@@ -57,7 +57,8 @@ public:
 
   std::filesystem::path
   getCacheFilePath(const std::filesystem::path &sourcePath,
-                   const std::string &systemTag = "") const;
+                   const std::string &systemTag = "",
+                   const std::string &customExt = "") const;
 
   // File-level AST cache operations
   ASTNode loadCachedAST(
@@ -78,6 +79,21 @@ public:
     return saveCachedAST(sourceFile, root, {}, systemTag);
   }
 
+  // Generic binary payload cache operations (for compiled object .obj and LLVM bitcode .bc)
+  bool loadCachedBinary(
+      const std::filesystem::path &sourceFile,
+      std::vector<uint8_t> &outBytes,
+      const std::vector<std::filesystem::path> &dependencies = {},
+      const std::string &systemTag = "",
+      const std::string &customExt = ".obj");
+
+  bool saveCachedBinary(
+      const std::filesystem::path &sourceFile,
+      const void *data, size_t size,
+      const std::vector<std::filesystem::path> &dependencies = {},
+      const std::string &systemTag = "",
+      const std::string &customExt = ".obj");
+
   // Directory-level AST bundle cache operations (for loadAllInDirectory)
   bool loadCachedDirectory(const std::filesystem::path &dirPath,
                            std::vector<ASTNode> &outNodes,
@@ -97,7 +113,10 @@ public:
   static uint64_t hashFile(const std::filesystem::path &filePath);
   static uint64_t getFileMtime(const std::filesystem::path &filePath);
   static uint64_t getFileSize(const std::filesystem::path &filePath);
+  static const char *getCompilerCommitHash() noexcept;
   static uint64_t getCompilerBuildHash() noexcept;
+  static void setCompilerBuildHashOverride(uint64_t hashOverride) noexcept;
+  static void clearCompilerBuildHashOverride() noexcept;
 
   // Compute composite fingerprint of all .stride files in a directory
   static bool computeDirectoryFingerprint(const std::filesystem::path &dirPath,

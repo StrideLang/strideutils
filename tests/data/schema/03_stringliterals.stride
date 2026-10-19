@@ -3,13 +3,13 @@ type _Literals {
     properties: [
 		typeProperty {
 			name: "stringLiteral"
-			types: [_StringLiteral]
+			allowedTypes: [_StringLiteral]
 			default: none
 			required: on
 		}		
         typeProperty {
 			name: "constrainedString"
-			types: [
+			allowedTypes: [
                 constrainedString {
                     minLength: 2
                     maxLength: 8

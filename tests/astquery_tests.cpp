@@ -11,9 +11,10 @@ using namespace strd;
 class ASTQueryTest : public ::testing::Test {
 protected:
   void SetUp() override {
+    auto strideroot = ASTFunctions::getDefaultStrideRoot();
     tree = AST::parseFile(TESTS_SOURCE_DIR "query/basic.stride");
     ASSERT_TRUE(tree != nullptr);
-    ASTFunctions::preprocess(tree);
+    ASTFunctions::preprocess(tree, nullptr, {}, strideroot);
   }
 
   ASTNode tree;
@@ -43,7 +44,7 @@ TEST_F(ASTQueryTest, GetModulePorts) {
   auto queryTestDecl = ASTQuery::findDeclarationByName("QueryTest", {}, tree);
   ASSERT_NE(queryTestDecl, nullptr);
 
-  auto portNames = ASTQuery::getModulePortNames(queryTestDecl);
+  auto portNames = ASTQuery::getModulePortNames(queryTestDecl, {}, tree);
   ASSERT_EQ(portNames.size(), 2);
   EXPECT_TRUE(std::find(portNames.begin(), portNames.end(), "input") !=
               portNames.end());

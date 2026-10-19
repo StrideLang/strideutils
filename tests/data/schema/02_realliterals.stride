@@ -3,13 +3,13 @@ type _Literals {
     properties: [
 		typeProperty {
 			name: "realLiteral"
-			types: [_RealLiteral, _IntLiteral]
+			allowedTypes: [_RealLiteral, _IntLiteral]
 			default: none
 			required: on
 		}		
         typeProperty {
 			name: "constrainedReal"
-			types: [
+			allowedTypes: [
                 constrainedReal {
                     minimum: 2.0
                     maximum: 20.0
@@ -20,7 +20,7 @@ type _Literals {
 		}		
         typeProperty {
 			name: "constrainedReal2"
-			types: [
+			allowedTypes: [
                 constrainedReal {
                     exclusiveMinimum: 2.1
                     exclusiveMaximum: 20.1

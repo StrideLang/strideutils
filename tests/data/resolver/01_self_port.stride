@@ -3,13 +3,13 @@ type _SelfType {
     properties: [
 		typeProperty {
 			name: "location"
-			types: [_IntLiteral]
+			allowedTypes: [_IntLiteral]
 			default: none
 			required: on
 		}		
         typeProperty {
 			name: "values"
-			types: [_IntLiteral]
+			allowedTypes: [_IntLiteral]
 			default: none
 			required: on
 		}
@@ -21,13 +21,13 @@ type _NestedSelfType {
     properties: [
 		typeProperty {
 			name: "location"
-			types: [_IntLiteral]
+			allowedTypes: [_IntLiteral]
 			default: none
 			required: on
 		}		
         typeProperty {
 			name: "values"
-			types: [_SelfType]
+			allowedTypes: [_SelfType]
 			default: none
 			required: on
 		}

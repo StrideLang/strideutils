@@ -1,0 +1,73 @@
+type SignalType {
+    typeName: "signal"
+    properties: []
+}
+
+type SwitchType {
+    typeName: "switch"
+    properties: []
+}
+
+type ModuleType {
+    typeName: "module"
+    properties: []
+}
+
+type BlockTestingType {
+    typeName: "blockTesting"
+    properties: [
+        typeProperty BlockProp {
+            name: "blockProp"
+            allowedTypes: _Block
+            required: on
+        }
+    ]
+}
+
+signal SigSingle {}
+signal SigBundle[4] {}
+switch SwSingle {}
+switch SwBundle[8] {}
+module ModTest {}
+
+# --- Valid cases (0 errors) ---
+blockTesting V1 {
+    # Accepts scalar signal declaration
+    blockProp: SigSingle
+}
+
+blockTesting V2 {
+    # Accepts array/bundle signal declaration
+    blockProp: SigBundle
+}
+
+blockTesting V3 {
+    # Accepts scalar switch declaration
+    blockProp: SwSingle
+}
+
+blockTesting V4 {
+    # Accepts array/bundle switch declaration
+    blockProp: SwBundle
+}
+
+# --- Failure cases ---
+blockTesting Fail1 {
+    # Rejects list
+    blockProp: [SigSingle, SwSingle]
+}
+
+blockTesting Fail2 {
+    # Rejects array slice
+    blockProp: SigBundle[0:2]
+}
+
+blockTesting Fail3 {
+    # Rejects integer literal
+    blockProp: 42
+}
+
+blockTesting Fail4 {
+    # Rejects module declaration
+    blockProp: ModTest
+}

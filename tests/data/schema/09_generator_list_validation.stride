@@ -1,0 +1,34 @@
+type ItemType {
+    typeName: "item"
+    properties: [
+        typeProperty Label {
+            name: "label"
+            allowedTypes: _StringLiteral
+            required: off
+        }
+    ]
+}
+
+# --- Valid cases (0 errors) ---
+
+# Valid generator with list matching range size (0:3 -> 4 items)
+item ValidGen[I in 0:3] {
+    label: ["A", "B", "C", "D"]
+}
+
+# Valid generator with scalar broadcast
+item ValidGenScalar[I in 0:3] {
+    label: "same"
+}
+
+# --- Failure cases ---
+
+# Fail1: Generator list element type mismatch (int instead of string)
+item FailGenElemType[I in 0:2] {
+    label: ["A", 42, "C"]
+}
+
+# Fail2: Generator list size mismatch (2 items != 4 in range 0:3)
+item FailGenSize[I in 0:3] {
+    label: ["A", "B"]
+}

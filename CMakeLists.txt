@@ -34,4 +34,17 @@ target_include_directories(StrideUtils PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include
 
 target_link_libraries(StrideUtils PUBLIC StrideParser)
 
+execute_process(
+  COMMAND git rev-parse --short HEAD
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  OUTPUT_VARIABLE STRIDE_GIT_COMMIT_HASH
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+if(NOT STRIDE_GIT_COMMIT_HASH)
+  set(STRIDE_GIT_COMMIT_HASH "unknown")
+endif()
+
+target_compile_definitions(StrideUtils PRIVATE STRIDE_GIT_COMMIT_HASH="${STRIDE_GIT_COMMIT_HASH}")
+
 add_subdirectory(tests)
