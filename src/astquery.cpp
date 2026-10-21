@@ -566,6 +566,15 @@ int ASTQuery::getArraySize(std::shared_ptr<ArrayNode> arrayNode,
                   tree, errors) +
               1;
       break;
+    case AST::GeneratorRange:
+      size += ASTFunctions::evaluateConstInteger(
+                  static_cast<GeneratorRangeNode *>(expr.get())->endIndex(), scope, tree,
+                  errors) -
+              ASTFunctions::evaluateConstInteger(
+                  static_cast<GeneratorRangeNode *>(expr.get())->startIndex(), scope,
+                  tree, errors) +
+              1;
+      break;
     case AST::Expression:
       type = ASTQuery::getNodeSize(expr, scope, tree);
       if (type == "_IntLiteral" || type == "_IntType") {
@@ -604,7 +613,26 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
     if (isGenerator(entityDecl)) {
       auto rangeProp = entityDecl->getCompilerProperty("_generatorRange");
       if (rangeProp) {
-        if (rangeProp->getNodeType() == AST::Range) {
+        if (rangeProp->getNodeType() == AST::GeneratorRange) {
+          auto genNode =
+              std::static_pointer_cast<GeneratorRangeNode>(rangeProp);
+          ASTNode start = genNode->startIndex();
+          ASTNode end = genNode->endIndex();
+          ASTNode step = genNode->stepIndex();
+          int startIndex =
+              ASTFunctions::evaluateConstInteger(start, scope, tree, errors);
+          int endIndex =
+              ASTFunctions::evaluateConstInteger(end, scope, tree, errors);
+          int stepVal = 1;
+          if (step) {
+            stepVal =
+                ASTFunctions::evaluateConstInteger(step, scope, tree, errors);
+          }
+          if (stepVal > 0 && endIndex >= startIndex) {
+            return (endIndex - startIndex) / stepVal + 1;
+          }
+          return 0;
+        } else if (rangeProp->getNodeType() == AST::Range) {
           auto rNode = std::static_pointer_cast<RangeNode>(rangeProp);
           ASTNode start = rNode->startIndex();
           ASTNode end = rNode->endIndex();
@@ -662,6 +690,25 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
         endIndex = ASTFunctions::evaluateConstInteger(end, scope, tree, errors);
         if (endIndex >= startIndex) {
           size += endIndex - startIndex + 1;
+        }
+
+      } else if (exp->getNodeType() == AST::GeneratorRange) {
+        GeneratorRangeNode *genRange =
+            static_cast<GeneratorRangeNode *>(exp.get());
+        ASTNode start = genRange->startIndex();
+        ASTNode end = genRange->endIndex();
+        ASTNode step = genRange->stepIndex();
+        int startIndex =
+            ASTFunctions::evaluateConstInteger(start, scope, tree, errors);
+        int endIndex =
+            ASTFunctions::evaluateConstInteger(end, scope, tree, errors);
+        int stepVal = 1;
+        if (step) {
+          stepVal =
+              ASTFunctions::evaluateConstInteger(step, scope, tree, errors);
+        }
+        if (stepVal > 0 && endIndex >= startIndex) {
+          size += (endIndex - startIndex) / stepVal + 1;
         }
 
       } else if (exp->getNodeType() == AST::MemberAccess) {
@@ -1156,24 +1203,29 @@ ASTNode ASTQuery::getMemberFromArrayConst(
     std::shared_ptr<DeclarationNode> blockDecl, int index, ASTNode tree,
     ScopeStack scopeStack, std::vector<LangError> *errors) {
   ASTNode out = nullptr;
-  if (ASTQuery::isConstant(blockDecl, scopeStack, tree)) {
+  if (blockDecl) {
     auto ports = blockDecl->getProperties();
     for (const std::shared_ptr<PropertyNode> &port : ports) {
-      if (port->getName() == "value") {
+      if (port->getName() == "value" || port->getName() == "default") {
         ASTNode value = port->getValue();
-        if (value->getNodeType() == AST::List) {
-          return ASTQuery::getMemberFromList(
-              static_cast<ListNode *>(value.get()), index, errors);
-        } else if (value->getNodeType() == AST::Array) {
+        if (value && value->getNodeType() == AST::List) {
+          auto listNode = static_cast<ListNode *>(value.get());
+          if (index >= 0 && index < (int)listNode->getChildren().size()) {
+            return listNode->getChildren()[index];
+          } else if (index >= 1 && index <= (int)listNode->getChildren().size()) {
+            return listNode->getChildren()[index - 1];
+          }
+          return nullptr;
+        } else if (value && value->getNodeType() == AST::Array) {
           auto decl = ASTQuery::findDeclarationByName(
               ASTQuery::getNodeName(blockDecl), scopeStack, tree,
               blockDecl->getNamespaceList());
           auto indexList = std::static_pointer_cast<ArrayNode>(value);
           if (indexList->getChildren().size() == 1) {
-            auto previousErrors = errors->size();
+            auto previousErrors = errors ? errors->size() : 0;
             auto indexVal = ASTFunctions::evaluateConstInteger(
                 indexList->getChildren()[0], scopeStack, tree, errors);
-            if (previousErrors == errors->size()) {
+            if (!errors || previousErrors == errors->size()) {
               return getMemberFromArrayConst(decl, indexVal, tree, scopeStack,
                                              errors);
             }

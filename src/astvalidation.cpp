@@ -3,6 +3,7 @@
 #include "stride/utils/logger.h"
 
 #include "stride/parser/arraynode.h"
+#include "stride/parser/generatorrangenode.h"
 #include "stride/parser/rangenode.h"
 #include "stride/parser/strideparser.h"
 
@@ -971,6 +972,21 @@ void ASTValidation::validateConstrainedList(
             errors.push_back(error);
           }
         }
+      } else if (portValue->getNodeType() == AST::GeneratorRange) {
+        auto dummyInt = std::make_shared<ValueNode>(
+            (int64_t)0, portValue->getFilename().c_str(), portValue->getLine());
+        if (!matchesAllowedType(dummyInt, validTypes, scopeStack, tree,
+                                parentNamespace, currentFramework)) {
+          LangError error;
+          error.lineNumber = portValue->getLine();
+          error.filename = portValue->getFilename();
+          error.type = LangError::ConstraintFail;
+          error.errorTokens.push_back(declaration->getEntityType());
+          error.errorTokens.push_back(AST::toText(allowedNode));
+          error.errorTokens.push_back("_IntLiteral");
+          error.errorTokens.push_back(AST::toText(portValue));
+          errors.push_back(error);
+        }
       } else {
         // portValue is an array slice or bundle
         std::string name = ASTQuery::getNodeName(portValue);
@@ -1142,6 +1158,8 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     return std::string("_NoneLiteral");
   } else if (child->getNodeType() == AST::List) {
     return std::string("_List");
+  } else if (child->getNodeType() == AST::GeneratorRange) {
+    return std::string("_GeneratorRange");
   } else if (child->getNodeType() == AST::Stream) {
     return std::string("_StreamType");
   }
@@ -1163,6 +1181,10 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
         validTypeNames.push_back("_Any");
       } else if (blockNode->getName() == "_List") {
         validTypeNames.push_back("_List");
+      } else if (blockNode->getName() == "_ExplicitList") {
+        validTypeNames.push_back("_ExplicitList");
+      } else if (blockNode->getName() == "_GeneratorRange") {
+        validTypeNames.push_back("_GeneratorRange");
       } else if (blockNode->getName() == "_Block") {
         validTypeNames.push_back("_Block");
       } else {
@@ -1225,12 +1247,16 @@ bool ASTValidation::isCollectionNode(
   if (node->getNodeType() == AST::List) {
     return true;
   }
+  if (node->getNodeType() == AST::GeneratorRange) {
+    return true;
+  }
   if (node->getNodeType() == AST::Array) {
     auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
     if (arrayNode->index()) {
       for (const auto &idx : arrayNode->index()->getChildren()) {
-        if (idx->getNodeType() == AST::Range) {
-          return true; // Array slice, e.g. Sig[0:8]
+        if (idx->getNodeType() == AST::Range ||
+            idx->getNodeType() == AST::GeneratorRange) {
+          return true; // Array slice, e.g. Sig[0:8] or Sig[0..8]
         }
       }
     }
@@ -1265,7 +1291,9 @@ bool ASTValidation::portExpectsListType(
       }
     } else if (validType->getNodeType() == AST::Entity) {
       auto entityNode = std::static_pointer_cast<EntityNode>(validType);
-      if (entityNode->getName() == "_List") {
+      if (entityNode->getName() == "_List" ||
+          entityNode->getName() == "_ExplicitList" ||
+          entityNode->getName() == "_GeneratorRange") {
         return true;
       }
     }
@@ -1282,20 +1310,64 @@ int ASTValidation::getCollectionSize(ASTNode node, const ScopeStack &scopeStack,
   if (node->getNodeType() == AST::List) {
     return static_cast<int>(node->getChildren().size());
   }
+  if (node->getNodeType() == AST::GeneratorRange) {
+    auto genRange = std::static_pointer_cast<GeneratorRangeNode>(node);
+    if (genRange->startIndex() && genRange->endIndex() &&
+        genRange->startIndex()->getNodeType() == AST::Int &&
+        genRange->endIndex()->getNodeType() == AST::Int) {
+      int start = std::static_pointer_cast<ValueNode>(genRange->startIndex())
+                      ->getIntValue();
+      int end = std::static_pointer_cast<ValueNode>(genRange->endIndex())
+                    ->getIntValue();
+      int step = 1;
+      if (genRange->stepIndex() &&
+          genRange->stepIndex()->getNodeType() == AST::Int) {
+        step = std::static_pointer_cast<ValueNode>(genRange->stepIndex())
+                   ->getIntValue();
+      }
+      if (step != 0) {
+        return (std::abs(end - start) / std::abs(step)) + 1;
+      }
+    }
+    return -1; // dynamic or unknown
+  }
   if (node->getNodeType() == AST::Array) {
     auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
     if (arrayNode->index()) {
       auto indices = arrayNode->index()->getChildren();
-      if (!indices.empty() && indices[0]->getNodeType() == AST::Range) {
-        auto range = std::static_pointer_cast<RangeNode>(indices[0]);
-        if (range->startIndex()->getNodeType() == AST::Int &&
-            range->endIndex()->getNodeType() == AST::Int) {
-          int start = std::static_pointer_cast<ValueNode>(range->startIndex())
+      if (!indices.empty()) {
+        if (indices[0]->getNodeType() == AST::Range) {
+          auto range = std::static_pointer_cast<RangeNode>(indices[0]);
+          if (range->startIndex()->getNodeType() == AST::Int &&
+              range->endIndex()->getNodeType() == AST::Int) {
+            int start = std::static_pointer_cast<ValueNode>(range->startIndex())
+                            ->getIntValue();
+            int end = std::static_pointer_cast<ValueNode>(range->endIndex())
                           ->getIntValue();
-          int end = std::static_pointer_cast<ValueNode>(range->endIndex())
-                        ->getIntValue();
-          if (end >= start) {
-            return (end - start) + 1; // inclusive range e.g. 0:8 -> 9 items
+            if (end >= start) {
+              return (end - start) + 1; // inclusive range e.g. 0:8 -> 9 items
+            }
+          }
+        } else if (indices[0]->getNodeType() == AST::GeneratorRange) {
+          auto genRange =
+              std::static_pointer_cast<GeneratorRangeNode>(indices[0]);
+          if (genRange->startIndex()->getNodeType() == AST::Int &&
+              genRange->endIndex()->getNodeType() == AST::Int) {
+            int start =
+                std::static_pointer_cast<ValueNode>(genRange->startIndex())
+                    ->getIntValue();
+            int end = std::static_pointer_cast<ValueNode>(genRange->endIndex())
+                          ->getIntValue();
+            int stepVal = 1;
+            if (genRange->stepIndex() &&
+                genRange->stepIndex()->getNodeType() == AST::Int) {
+              stepVal =
+                  std::static_pointer_cast<ValueNode>(genRange->stepIndex())
+                      ->getIntValue();
+            }
+            if (stepVal > 0 && end >= start) {
+              return (end - start) / stepVal + 1;
+            }
           }
         }
       }
@@ -1409,7 +1481,17 @@ bool ASTValidation::matchesAllowedType(
   }
   if (element->getNodeType() == AST::List) {
     return std::find(validTypes.begin(), validTypes.end(), "_List") !=
-           validTypes.end();
+               validTypes.end() ||
+           std::find(validTypes.begin(), validTypes.end(), "_ExplicitList") !=
+               validTypes.end() ||
+           std::find(validTypes.begin(), validTypes.end(), "_ListLiteral") !=
+               validTypes.end();
+  }
+  if (element->getNodeType() == AST::GeneratorRange) {
+    return std::find(validTypes.begin(), validTypes.end(), "_List") !=
+               validTypes.end() ||
+           std::find(validTypes.begin(), validTypes.end(), "_GeneratorRange") !=
+               validTypes.end();
   }
   if (element->getNodeType() == AST::MemberAccess) {
     // TODO: Fully resolve the data type of member access expressions (e.g.

@@ -3,6 +3,7 @@
 */
 
 #include "stride/utils/iastserializer.h"
+#include "stride/utils/cacheenvelope.h"
 #include "stride/utils/third_party/zpp_bits.h"
 
 #include "stride/parser/arraynode.h"
@@ -19,6 +20,7 @@
 #include "stride/parser/platformnode.h"
 #include "stride/parser/propertynode.h"
 #include "stride/parser/rangenode.h"
+#include "stride/parser/generatorrangenode.h"
 #include "stride/parser/scopenode.h"
 #include "stride/parser/streamnode.h"
 #include "stride/parser/valuenode.h"
@@ -205,6 +207,7 @@ private:
     }
     case AST::Stream:
     case AST::Range:
+    case AST::GeneratorRange:
     case AST::List:
     default:
       break;
@@ -276,6 +279,11 @@ bool reconstructGraph(const SerializedASTGraph &graph,
     }
     case AST::Range: {
       created = std::make_shared<RangeNode>(kDummyNode, kDummyNode, fname, line);
+      created->setNamespaceList(rec.scope);
+      break;
+    }
+    case AST::GeneratorRange: {
+      created = std::make_shared<GeneratorRangeNode>(kDummyNode, kDummyNode, fname, line);
       created->setNamespaceList(rec.scope);
       break;
     }
@@ -423,7 +431,9 @@ public:
     return "zpp_bits";
   }
 
-  uint32_t getFormatVersion() const noexcept override { return 1; }
+  uint32_t getFormatVersion() const noexcept override {
+    return kSerializerVersion;
+  }
 
   bool serialize(const ASTNode &root, std::ostream &out) const override {
     std::vector<std::byte> bytes;

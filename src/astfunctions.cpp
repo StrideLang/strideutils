@@ -1166,7 +1166,9 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
         error.type = LangError::InvalidIndexType;
         error.lineNumber = arrayNode->index()->getLine();
         error.errorTokens.push_back(arrayNode->getName());
-        errors->push_back(error);
+        if (errors) {
+          errors->push_back(error);
+        }
         return 0;
       }
     }
@@ -1174,7 +1176,9 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
     error.type = LangError::InvalidType;
     error.lineNumber = arrayNode->getLine();
     error.errorTokens.push_back(arrayNode->getName());
-    errors->push_back(error);
+    if (errors) {
+      errors->push_back(error);
+    }
   } else if (node->getNodeType() == AST::Entity) {
     std::shared_ptr<EntityNode> nameNode =
         std::static_pointer_cast<EntityNode>(node);
@@ -1184,15 +1188,44 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
       return evaluateConstInteger(declaration->getPropertyValue("value"), scope,
                                   tree, errors);
     }
+    if (errors) {
+      LangError error;
+      error.type = LangError::InvalidType;
+      error.lineNumber = node->getLine();
+      error.errorTokens.push_back(nameNode->getName());
+      errors->push_back(error);
+    }
+    return 0;
   } else if (node->getNodeType() == AST::Expression) {
-    // FIXME: check expression out
+    auto expr = std::static_pointer_cast<ExpressionNode>(node);
+    if (expr->getExpressionType() == ExpressionNode::UnaryMinus) {
+      return -evaluateConstInteger(expr->getValue(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Add) {
+      return evaluateConstInteger(expr->getLeft(), scope, tree, errors) +
+             evaluateConstInteger(expr->getRight(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Subtract) {
+      return evaluateConstInteger(expr->getLeft(), scope, tree, errors) -
+             evaluateConstInteger(expr->getRight(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Multiply) {
+      return evaluateConstInteger(expr->getLeft(), scope, tree, errors) *
+             evaluateConstInteger(expr->getRight(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Divide) {
+      int64_t denom =
+          evaluateConstInteger(expr->getRight(), scope, tree, errors);
+      if (denom != 0) {
+        return evaluateConstInteger(expr->getLeft(), scope, tree, errors) /
+               denom;
+      }
+    }
     return 0;
   } else {
     LangError error;
     error.type = LangError::InvalidType;
     error.lineNumber = node->getLine();
     error.errorTokens.push_back("");
-    errors->push_back(error);
+    if (errors) {
+      errors->push_back(error);
+    }
   }
   return result;
 }

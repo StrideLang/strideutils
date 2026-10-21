@@ -10,12 +10,14 @@
 
 namespace strd {
 
+constexpr uint32_t kSerializerVersion = 2;
+
 #pragma pack(push, 1)
 struct CacheEnvelopeHeader {
   char magic[4]{'S', 'T', 'R', 'D'};
   uint32_t envelopeVersion{1};
   uint32_t serializerFourCC{0};
-  uint32_t serializerVersion{1};
+  uint32_t serializerVersion{kSerializerVersion};
 
   uint64_t compilerBuildHash{0};
   uint64_t systemConfigHash{0};
