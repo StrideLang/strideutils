@@ -306,6 +306,8 @@ void ASTFunctions::insertRequiredObjectsForNode(
       for (const auto &decl : alldecls) {
         if (std::find(blockList.begin(), blockList.end(), decl) ==
             blockList.end()) {
+          // TODO we should filter here to only bring in the ones that are
+          // needed according to the required types.
           blockList.push_back(decl);
         }
       }
@@ -426,10 +428,10 @@ void ASTFunctions::insertRequiredObjectsForNode(
           insertRequiredObjectsForNode(typeDecl, objects, tree, platformScope,
                                        "", processedNodes);
           insertDependentTypes(typeDecl, objects, tree);
-          if (allocated) {
-            delete platformScope;
-            platformScope = nullptr;
-          }
+        }
+        if (allocated) {
+          delete platformScope;
+          platformScope = nullptr;
         }
       }
       //      }
@@ -688,8 +690,7 @@ void ASTFunctions::fillDefaultPropertiesForNode(
     }
   } else if (node->getNodeType() == AST::List ||
              node->getNodeType() == AST::Expression) {
-    ListNode *list = static_cast<ListNode *>(node.get());
-    for (const ASTNode &listElement : list->getChildren()) {
+    for (const ASTNode &listElement : node->getChildren()) {
       ASTFunctions::fillDefaultPropertiesForNode(listElement, scopeNodes);
     }
   } else if (node->getNodeType() == AST::Stream) {
