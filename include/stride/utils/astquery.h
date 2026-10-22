@@ -1,5 +1,6 @@
 /*
-    Stride is licensed under the terms of the GNU Affero General Public License version 3.
+    Stride is licensed under the terms of the GNU Affero General Public License
+   version 3.
 
     Copyright (C) 2022-2026 Andres Cabrera
     All rights reserved.
@@ -49,7 +50,8 @@ public:
 
   static std::vector<std::shared_ptr<ImportNode>> getImportNodes(ASTNode tree);
 
-  static std::vector<std::shared_ptr<PackageNode>> getPackageNodes(ASTNode tree);
+  static std::vector<std::shared_ptr<PackageNode>>
+  getPackageNodes(ASTNode tree);
 
   // Find declarations
   static std::shared_ptr<DeclarationNode>
@@ -69,8 +71,9 @@ public:
                       std::string currentFramework = std::string());
 
   static std::shared_ptr<DeclarationNode>
-  findTypeDeclaration(std::shared_ptr<DeclarationNode> entityDecl, ScopeStack scope,
-                      ASTNode tree, std::string currentFramework = "");
+  findTypeDeclaration(std::shared_ptr<DeclarationNode> entityDecl,
+                      ScopeStack scope, ASTNode tree,
+                      std::string currentFramework = "");
 
   static std::shared_ptr<DeclarationNode>
   findTypeDeclarationByName(std::string typeName, ScopeStack scope,
@@ -90,8 +93,8 @@ public:
   static int getNodeSize(ASTNode node, const ScopeStack &scopeStack,
                          ASTNode tree);
 
-  static int getArraySize(std::shared_ptr<ArrayNode> arrayNode, ScopeStack scope,
-                          ASTNode tree,
+  static int getArraySize(std::shared_ptr<ArrayNode> arrayNode,
+                          ScopeStack scope, ASTNode tree,
                           std::vector<LangError> *errors = nullptr);
 
   static int getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
@@ -112,8 +115,8 @@ public:
                     const ScopeStack &scope, ASTNode tree);
 
   static std::vector<ASTNode>
-  getInheritedPorts(std::shared_ptr<DeclarationNode> entityDecl, ScopeStack scope,
-                    ASTNode tree);
+  getInheritedPorts(std::shared_ptr<DeclarationNode> entityDecl,
+                    ScopeStack scope, ASTNode tree);
 
   // Type information
   static std::vector<ASTNode>
@@ -122,8 +125,8 @@ public:
                   std::string framework = "");
 
   static std::vector<ASTNode>
-  getPortsForTypeEntity(std::shared_ptr<DeclarationNode> entityDecl, ScopeStack scope,
-                        ASTNode tree);
+  getPortsForTypeEntity(std::shared_ptr<DeclarationNode> entityDecl,
+                        ScopeStack scope, ASTNode tree);
 
   static std::vector<ASTNode>
   getValidTypesForPort(std::shared_ptr<DeclarationNode> typeDeclaration,
@@ -144,8 +147,7 @@ public:
   getModuleMainInputPort(std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::vector<std::shared_ptr<DeclarationNode>>
-  getModulePropertyOutputPorts(
-      std::shared_ptr<DeclarationNode> moduleDecl);
+  getModulePropertyOutputPorts(std::shared_ptr<DeclarationNode> moduleDecl);
 
   static std::vector<std::shared_ptr<DeclarationNode>>
   getModulePropertyInputPorts(std::shared_ptr<DeclarationNode> moduleDecl);
@@ -159,8 +161,8 @@ public:
 
   // Array Declarations
   static ASTNode
-  getMemberFromArrayConst(std::shared_ptr<DeclarationNode> arrayDecl,
-                          int index, ASTNode tree, ScopeStack scopeStack,
+  getMemberFromArrayConst(std::shared_ptr<DeclarationNode> arrayDecl, int index,
+                          ASTNode tree, ScopeStack scopeStack,
                           std::vector<LangError> *errors);
 
   // Const Declarations
@@ -202,6 +204,7 @@ public:
                                const ScopeStack &scope, ASTNode tree);
   static bool isDomainDefinition(std::shared_ptr<DeclarationNode> typeDecl,
                                  const ScopeStack &scope, ASTNode tree);
+  static bool isModuleNode(ASTNode node, const ScopeStack &scope, ASTNode tree);
 
 private:
   static bool namespaceMatch(std::vector<std::string> scopeList,
