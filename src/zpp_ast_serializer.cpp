@@ -2,8 +2,8 @@
     Stride is licensed under the terms of the 3-clause BSD license.
 */
 
-#include "stride/utils/iastserializer.h"
 #include "stride/utils/cacheenvelope.h"
+#include "stride/utils/iastserializer.h"
 #include "stride/utils/third_party/zpp_bits.h"
 
 #include "stride/parser/arraynode.h"
@@ -12,6 +12,7 @@
 #include "stride/parser/entitynode.h"
 #include "stride/parser/expressionnode.h"
 #include "stride/parser/functionnode.h"
+#include "stride/parser/generatorrangenode.h"
 #include "stride/parser/importnode.h"
 #include "stride/parser/keywordnode.h"
 #include "stride/parser/listnode.h"
@@ -20,7 +21,6 @@
 #include "stride/parser/platformnode.h"
 #include "stride/parser/propertynode.h"
 #include "stride/parser/rangenode.h"
-#include "stride/parser/generatorrangenode.h"
 #include "stride/parser/scopenode.h"
 #include "stride/parser/streamnode.h"
 #include "stride/parser/valuenode.h"
@@ -220,8 +220,6 @@ private:
 
 bool reconstructGraph(const SerializedASTGraph &graph,
                       std::vector<ASTNode> &outRoots) {
-  static const ASTNode kDummyNode = std::make_shared<AST>();
-  static const auto kDummyList = std::make_shared<ListNode>("", -1);
 
   std::vector<ASTNode> nodes(graph.nodes.size() + 1, nullptr);
 
@@ -245,15 +243,16 @@ bool reconstructGraph(const SerializedASTGraph &graph,
     }
     case AST::Platform: {
       int major = static_cast<int>(rec.intVal >> 32);
-      int minor = static_cast<int>(static_cast<int32_t>(rec.intVal & 0xFFFFFFFF));
+      int minor =
+          static_cast<int>(static_cast<int32_t>(rec.intVal & 0xFFFFFFFF));
       created = std::make_shared<SystemNode>(rec.name, major, minor, fname,
                                              line, rec.extraStrings);
       created->setNamespaceList(rec.scope);
       break;
     }
     case AST::Array: {
-      created = std::make_shared<ArrayNode>(rec.name, kDummyList, fname, line,
-                                            rec.scope);
+      created = std::make_shared<ArrayNode>(
+          rec.name, std::make_shared<ListNode>("", -1), fname, line, rec.scope);
       break;
     }
     case AST::Declaration: {
@@ -262,28 +261,33 @@ bool reconstructGraph(const SerializedASTGraph &graph,
       break;
     }
     case AST::ArrayDeclaration: {
-      auto dummyArr = std::make_shared<ArrayNode>("", kDummyList, fname, line);
+      auto dummyArr = std::make_shared<ArrayNode>(
+          "", std::make_shared<ListNode>("", -1), fname, line);
       created = std::make_shared<DeclarationNode>(
           dummyArr, rec.secondaryStr, nullptr, fname, line, rec.scope);
       break;
     }
     case AST::Stream: {
-      created = std::make_shared<StreamNode>(kDummyNode, kDummyNode, fname, line);
+      created = std::make_shared<StreamNode>(
+          std::make_shared<AST>(), std::make_shared<AST>(), fname, line);
       created->setNamespaceList(rec.scope);
       break;
     }
     case AST::Property: {
-      created = std::make_shared<PropertyNode>(rec.name, kDummyNode, fname, line);
+      created = std::make_shared<PropertyNode>(
+          rec.name, std::make_shared<AST>(), fname, line);
       created->setNamespaceList(rec.scope);
       break;
     }
     case AST::Range: {
-      created = std::make_shared<RangeNode>(kDummyNode, kDummyNode, fname, line);
+      created = std::make_shared<RangeNode>(
+          std::make_shared<AST>(), std::make_shared<AST>(), fname, line);
       created->setNamespaceList(rec.scope);
       break;
     }
     case AST::GeneratorRange: {
-      created = std::make_shared<GeneratorRangeNode>(kDummyNode, kDummyNode, fname, line);
+      created = std::make_shared<GeneratorRangeNode>(
+          std::make_shared<AST>(), std::make_shared<AST>(), fname, line);
       created->setNamespaceList(rec.scope);
       break;
     }
@@ -293,8 +297,8 @@ bool reconstructGraph(const SerializedASTGraph &graph,
       break;
     }
     case AST::Import: {
-      created = std::make_shared<ImportNode>(rec.name, fname, line,
-                                             rec.secondaryStr);
+      created =
+          std::make_shared<ImportNode>(rec.name, fname, line, rec.secondaryStr);
       created->setNamespaceList(rec.scope);
       break;
     }
@@ -342,10 +346,12 @@ bool reconstructGraph(const SerializedASTGraph &graph,
       auto etype = static_cast<ExpressionNode::ExpressionType>(rec.subType);
       if (etype == ExpressionNode::UnaryMinus ||
           etype == ExpressionNode::LogicalNot) {
-        created = std::make_shared<ExpressionNode>(etype, kDummyNode, fname, line);
+        created = std::make_shared<ExpressionNode>(
+            etype, std::make_shared<AST>(), fname, line);
       } else {
-        created = std::make_shared<ExpressionNode>(etype, kDummyNode, kDummyNode,
-                                                   fname, line);
+        created = std::make_shared<ExpressionNode>(
+            etype, std::make_shared<AST>(), std::make_shared<AST>(), fname,
+            line);
       }
       created->setNamespaceList(rec.scope);
       break;
