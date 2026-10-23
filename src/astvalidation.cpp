@@ -55,16 +55,6 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
   } else if (node->getNodeType() == AST::Entity) {
     EntityNode *entity = static_cast<EntityNode *>(node.get());
     std::string entityName = entity->getName();
-    static const std::unordered_set<std::string> builtInTypeEntities = {
-        "_RealType", "_IntType", "_StringType", "_SwitchType", "_BoolType",
-        "_RingBufferType", "_TableType", "_Block", "_Any",
-        "_FrameworkDataType", "_ResourceType", "_PortProperty",
-        "_NoneLiteral", "_IntLiteral", "_RealLiteral", "_StringLiteral",
-        "_SwitchLiteral", "_MemberAccess", "_StreamType"
-    };
-    if (builtInTypeEntities.find(entityName) != builtInTypeEntities.end()) {
-      return;
-    }
     std::vector<std::string> namespaces = entity->getNamespaceList();
     namespaces.insert(namespaces.begin(), parentNamespace.begin(),
                       parentNamespace.end());
@@ -369,6 +359,20 @@ void ASTValidation::validateTypesForDeclaration(
     std::vector<std::shared_ptr<PropertyNode>> ports = decl->getProperties();
     std::vector<ASTNode> blocks = ASTQuery::getModuleEntities(decl);
     scopeStack.push_back({decl, blocks});
+    // Set by the resolver when a block is written by a module whose output
+    // type comes from its output port, so its type can't be resolved.
+    auto unresolvedType = decl->getCompilerProperty("unresolvedType");
+    if (unresolvedType && unresolvedType->getNodeType() == AST::String) {
+      LangError error;
+      error.type = LangError::UnresolvedType;
+      error.lineNumber = decl->getLine();
+      error.errorTokens.push_back(decl->getName());
+      error.errorTokens.push_back(
+          std::static_pointer_cast<ValueNode>(unresolvedType)
+              ->getStringValue());
+      error.filename = decl->getFilename();
+      errors.push_back(error);
+    }
     auto typeProperties =
         ASTQuery::getPortsForTypeEntity(declaration, scopeStack, tree);
     for (const auto &port : ports) {

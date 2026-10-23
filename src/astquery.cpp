@@ -975,7 +975,10 @@ ASTQuery::findTypeClass(std::string name, ASTNode tree,
   if (!tree) {
     return nullptr;
   }
-  std::shared_ptr<DeclarationNode> found;
+  // Framework type classes overlay the dummy one in the library, which has no
+  // framework.
+  std::shared_ptr<DeclarationNode> frameworkClass;
+  std::shared_ptr<DeclarationNode> libraryClass;
   for (const ASTNode &node : tree->getChildren()) {
     if (node->getNodeType() != AST::Declaration) {
       continue;
@@ -984,17 +987,23 @@ ASTQuery::findTypeClass(std::string name, ASTNode tree,
     if (decl->getEntityType() != "typeClass" || decl->getName() != name) {
       continue;
     }
+    std::string framework;
     auto frameworkNode = decl->getCompilerProperty("framework");
-    if (frameworkNode && frameworkNode->getNodeType() == AST::String &&
-        std::static_pointer_cast<ValueNode>(frameworkNode)->getStringValue() ==
-            currentFramework) {
-      return decl;
+    if (frameworkNode && frameworkNode->getNodeType() == AST::String) {
+      framework =
+          std::static_pointer_cast<ValueNode>(frameworkNode)->getStringValue();
     }
-    if (!found) {
-      found = decl;
+    if (framework.empty()) {
+      if (!libraryClass) {
+        libraryClass = decl;
+      }
+    } else if (framework == currentFramework) {
+      return decl;
+    } else if (!frameworkClass) {
+      frameworkClass = decl;
     }
   }
-  return found;
+  return frameworkClass ? frameworkClass : libraryClass;
 }
 
 std::vector<std::string>
