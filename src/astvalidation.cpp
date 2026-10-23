@@ -369,8 +369,34 @@ void ASTValidation::validateTypesForDeclaration(
     std::vector<std::shared_ptr<PropertyNode>> ports = decl->getProperties();
     std::vector<ASTNode> blocks = ASTQuery::getModuleEntities(decl);
     scopeStack.push_back({decl, blocks});
+    auto typeProperties =
+        ASTQuery::getPortsForTypeEntity(declaration, scopeStack, tree);
     for (const auto &port : ports) {
       std::string portName = port->getName();
+      // Read only properties (writeable: off) are set by the compiler. Only
+      // defaults filled in by the compiler may be present.
+      if (!port->getCompilerProperty("defaultFilled")) {
+        for (const auto &typeProperty : typeProperties) {
+          auto typePropertyDecl =
+              std::static_pointer_cast<DeclarationNode>(typeProperty);
+          auto nameNode = typePropertyDecl->getPropertyValue("name");
+          auto writeableNode = typePropertyDecl->getPropertyValue("writeable");
+          if (nameNode && nameNode->getNodeType() == AST::String &&
+              std::static_pointer_cast<ValueNode>(nameNode)->getStringValue() ==
+                  portName &&
+              writeableNode && writeableNode->getNodeType() == AST::Switch &&
+              !std::static_pointer_cast<ValueNode>(writeableNode)
+                   ->getSwitchValue()) {
+            LangError error;
+            error.type = LangError::ReadOnlyPort;
+            error.lineNumber = port->getLine();
+            error.errorTokens.push_back(blockType);
+            error.errorTokens.push_back(portName);
+            error.filename = port->getFilename();
+            errors.push_back(error);
+          }
+        }
+      }
       // Check if portname is valid
       std::vector<ASTNode> portTypesList = ASTQuery::getValidTypesForPort(
           declaration, portName, scopeStack, tree);
@@ -574,6 +600,9 @@ void ASTValidation::validateTypesForDeclaration(
               bool typeIsValid = false;
               std::string actualType = getTypeName(portValue, scopeStack, tree,
                                                    {}, currentFramework);
+              if (actualType.empty()) {
+                actualType = ASTQuery::getNodeName(portValue);
+              }
 
               if (std::find(validTypeNames.begin(), validTypeNames.end(),
                             "_Any") != validTypeNames.end()) {
@@ -1187,6 +1216,14 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
         validTypeNames.push_back("_GeneratorRange");
       } else if (blockNode->getName() == "_Block") {
         validTypeNames.push_back("_Block");
+      } else if (auto typeClass = ASTQuery::findTypeClass(
+                     blockNode->getName(), tree, currentFramework)) {
+        // A type class allows any of its members
+        if (auto typesNode = typeClass->getPropertyValue("types")) {
+          for (const auto &member : typesNode->getChildren()) {
+            validTypeNames.push_back(ASTQuery::getNodeName(member));
+          }
+        }
       } else {
         std::vector<std::string> namespaces = blockNode->getNamespaceList();
         namespaces.insert(namespaces.begin(), parentNamespace.begin(),

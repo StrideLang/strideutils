@@ -969,6 +969,85 @@ ASTQuery::getValidTypesForPort(std::shared_ptr<DeclarationNode> typeDeclaration,
   return validTypes;
 }
 
+std::shared_ptr<DeclarationNode>
+ASTQuery::findTypeClass(std::string name, ASTNode tree,
+                        std::string currentFramework) {
+  if (!tree) {
+    return nullptr;
+  }
+  std::shared_ptr<DeclarationNode> found;
+  for (const ASTNode &node : tree->getChildren()) {
+    if (node->getNodeType() != AST::Declaration) {
+      continue;
+    }
+    auto decl = std::static_pointer_cast<DeclarationNode>(node);
+    if (decl->getEntityType() != "typeClass" || decl->getName() != name) {
+      continue;
+    }
+    auto frameworkNode = decl->getCompilerProperty("framework");
+    if (frameworkNode && frameworkNode->getNodeType() == AST::String &&
+        std::static_pointer_cast<ValueNode>(frameworkNode)->getStringValue() ==
+            currentFramework) {
+      return decl;
+    }
+    if (!found) {
+      found = decl;
+    }
+  }
+  return found;
+}
+
+std::vector<std::string>
+ASTQuery::getDataTypeClassNames(std::shared_ptr<DeclarationNode> decl,
+                                ASTNode tree) {
+  std::vector<std::string> names;
+  auto typeDecl = ASTQuery::findTypeDeclaration(decl, {}, tree);
+  if (!typeDecl) {
+    return names;
+  }
+  for (const auto &allowedType :
+       ASTQuery::getValidTypesForPort(typeDecl, "type", {}, tree)) {
+    if (allowedType->getNodeType() == AST::Entity) {
+      auto name = ASTQuery::getNodeName(allowedType);
+      if (name != "_NoneLiteral") {
+        names.push_back(name);
+      }
+    }
+  }
+  return names;
+}
+
+bool ASTQuery::isRated(std::shared_ptr<DeclarationNode> decl, ASTNode tree) {
+  auto typeDecl = ASTQuery::findTypeDeclaration(decl, {}, tree);
+  if (!typeDecl) {
+    return decl->getPropertyValue("rate") != nullptr;
+  }
+  if (typeDecl->getName() == "_Rated") {
+    return true;
+  }
+  for (const auto &inherited :
+       ASTQuery::getInheritedTypes(typeDecl, {}, tree)) {
+    if (inherited->getName() == "_Rated") {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ASTQuery::isTypeClassMember(std::shared_ptr<DeclarationNode> typeClass,
+                                 std::string typeName) {
+  auto typesNode = typeClass->getPropertyValue("types");
+  if (!typesNode) {
+    return false;
+  }
+  for (const auto &member : typesNode->getChildren()) {
+    if (ASTQuery::getNodeName(member) == typeName) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::vector<ASTNode>
 ASTQuery::getModuleEntities(std::shared_ptr<DeclarationNode> moduleDecl) {
   std::vector<ASTNode> blocks;
@@ -1387,22 +1466,11 @@ bool ASTQuery::isStronglyTyped(std::shared_ptr<DeclarationNode> typeDecl,
     for (const auto &blockNode : blocksList->getChildren()) {
       auto blockDecl = std::static_pointer_cast<DeclarationNode>(blockNode);
       if (blockDecl && blockDecl->getEntityType() == "signal") {
+        // Ports declare no type. Blocks typed from a port (Port.type) are
+        // generic, as their type depends on the connection.
         auto typeNode = blockDecl->getPropertyValue("type");
-        if (!typeNode) {
-          return false;
-        }
-      }
-    }
-  }
-
-  // Also check ports, which might lack types in generic modules
-  auto portsList = typeDecl->getPropertyValue("ports");
-  if (portsList && portsList->getNodeType() == AST::List) {
-    for (const auto &portNode : portsList->getChildren()) {
-      auto portDecl = std::static_pointer_cast<DeclarationNode>(portNode);
-      if (portDecl) {
-        auto typeNode = portDecl->getPropertyValue("type");
-        if (!typeNode) {
+        if (!typeNode || typeNode->getNodeType() == AST::None ||
+            typeNode->getNodeType() == AST::MemberAccess) {
           return false;
         }
       }

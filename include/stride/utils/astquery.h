@@ -81,6 +81,24 @@ public:
                             std::vector<std::string> namespaces = {},
                             std::string currentFramework = "");
 
+  // Finds a typeClass declaration in the root of tree. Prefers the one from
+  // currentFramework, as each framework provides its own type classes.
+  static std::shared_ptr<DeclarationNode>
+  findTypeClass(std::string name, ASTNode tree,
+                std::string currentFramework = "");
+
+  // Names of the typeClasses listed in the allowedTypes of the type property
+  // of decl's type. Empty for declarations with a builtin data type.
+  static std::vector<std::string>
+  getDataTypeClassNames(std::shared_ptr<DeclarationNode> decl, ASTNode tree);
+
+  static bool isTypeClassMember(std::shared_ptr<DeclarationNode> typeClass,
+                                std::string typeName);
+
+  // Rated declarations inherit _Rated. Others are reactive and take the rate
+  // of whatever writes to them.
+  static bool isRated(std::shared_ptr<DeclarationNode> decl, ASTNode tree);
+
   // Get name for node. Names are found in different places for different types
   // of nodes
   static std::string getNodeName(ASTNode node);

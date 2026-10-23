@@ -84,6 +84,11 @@ public:
   static void fillDefaultPropertiesForNode(ASTNode node,
                                            std::vector<ASTNode> scopeNodes);
 
+  // Default for a property port, taken from the declaration of its bound
+  // block in moduleDecl. nullptr if the block declares no literal default.
+  static ASTNode getPortBlockDefault(DeclarationNode *portDecl,
+                                     std::shared_ptr<DeclarationNode> moduleDecl);
+
   // Process Anonymous declarations inside streams
   // extracting definitions and a replacing with name
   static void processAnoymousDeclarations(ASTNode tree);

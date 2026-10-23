@@ -565,6 +565,41 @@ void ASTFunctions::fillDefaultProperties(ASTNode tree) {
   }
 }
 
+ASTNode
+ASTFunctions::getPortBlockDefault(DeclarationNode *portDecl,
+                                  std::shared_ptr<DeclarationNode> moduleDecl) {
+  // Ports have no default. It comes from the declaration of the bound block.
+  auto blockNode = portDecl->getPropertyValue("block");
+  auto blocksNode = moduleDecl->getPropertyValue("blocks");
+  if (!blockNode || blockNode->getNodeType() != AST::Entity || !blocksNode) {
+    return nullptr;
+  }
+  auto blockName = ASTQuery::getNodeName(blockNode);
+  for (const auto &block : blocksNode->getChildren()) {
+    if ((block->getNodeType() != AST::Declaration &&
+         block->getNodeType() != AST::ArrayDeclaration) ||
+        ASTQuery::getNodeName(block) != blockName) {
+      continue;
+    }
+    auto blockDecl = std::static_pointer_cast<DeclarationNode>(block);
+    for (const auto &property : blockDecl->getProperties()) {
+      // Only defaults written in the source, and only literals: a default
+      // naming another block refers to the module's scope, not the caller's.
+      auto value = property->getValue();
+      if (property->getName() == "default" && value &&
+          !property->getCompilerProperty("defaultFilled") &&
+          (value->getNodeType() == AST::Int ||
+           value->getNodeType() == AST::Real ||
+           value->getNodeType() == AST::Switch ||
+           value->getNodeType() == AST::String ||
+           value->getNodeType() == AST::List)) {
+        return value->deepCopy();
+      }
+    }
+  }
+  return nullptr;
+}
+
 void ASTFunctions::fillDefaultPropertiesForNode(
     ASTNode node, std::vector<ASTNode> scopeNodes) {
   if (!node) {
@@ -618,6 +653,10 @@ void ASTFunctions::fillDefaultPropertiesForNode(
                   propertyName, defaultValueNode->deepCopy(),
                   portDescription->getFilename().data(),
                   portDescription->getLine());
+          // Not written in the source, so allowed for read only properties
+          newProperty->setCompilerProperty(
+              "defaultFilled",
+              std::make_shared<ValueNode>(true, __FILE__, __LINE__));
           destBlock->addProperty(newProperty);
         }
       }
@@ -670,7 +709,7 @@ void ASTFunctions::fillDefaultPropertiesForNode(
               }
               if (!propertySet) {
                 ASTNode defaultValueNode =
-                    propertyDecl->getPropertyValue("default");
+                    getPortBlockDefault(propertyDecl, functionModule);
                 if (defaultValueNode) {
                   std::shared_ptr<PropertyNode> newProperty =
                       std::make_shared<PropertyNode>(
