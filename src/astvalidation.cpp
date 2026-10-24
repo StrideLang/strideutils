@@ -20,7 +20,86 @@ std::vector<LangError> ASTValidation::validate(ASTNode tree) {
   std::vector<LangError> errors;
   std::set<const void *> processedNodes;
   validateTypes(tree, errors, {}, tree, {}, "", &processedNodes);
+  validateShadowing(tree, errors);
   return errors;
+}
+
+namespace {
+
+bool isDeclarationNode(const ASTNode &node) {
+  return node && (node->getNodeType() == AST::Declaration ||
+                  node->getNodeType() == AST::ArrayDeclaration);
+}
+
+// Declaration named name in any enclosing scope frame.
+std::shared_ptr<DeclarationNode> findEnclosingDeclaration(
+    const std::string &name, const ScopeStack &scope, const ASTNode &self) {
+  for (const auto &frame : scope) {
+    for (const auto &node : frame.second) {
+      if (node == self || !isDeclarationNode(node)) {
+        continue;
+      }
+      auto decl = std::static_pointer_cast<DeclarationNode>(node);
+      if (decl->getName() == name) {
+        return decl;
+      }
+    }
+  }
+  return nullptr;
+}
+
+void validateShadowingInScope(ScopeStack &scope, const ASTNode &tree,
+                              std::vector<LangError> &errors) {
+  // Copy: recursion pushes frames, which may reallocate the stack.
+  const auto nodes = scope.back().second;
+  for (const auto &node : nodes) {
+    if (!isDeclarationNode(node)) {
+      continue;
+    }
+    auto decl = std::static_pointer_cast<DeclarationNode>(node);
+    auto blocks = decl->getPropertyValue("blocks");
+    if (!blocks || blocks->getNodeType() != AST::List) {
+      continue;
+    }
+    // Inheritance is declared on the type (e.g. _Reaction), not the instance.
+    auto typeDecl = ASTQuery::findTypeDeclaration(decl, scope, tree);
+    if (typeDecl && ASTQuery::isCodeGenerator(typeDecl, scope, tree) &&
+        ASTQuery::isDomainMember(typeDecl, scope, tree)) {
+      for (const auto &block : blocks->getChildren()) {
+        if (!isDeclarationNode(block)) {
+          continue;
+        }
+        auto blockDecl = std::static_pointer_cast<DeclarationNode>(block);
+        auto shadowed =
+            findEnclosingDeclaration(blockDecl->getName(), scope, block);
+        if (shadowed) {
+          LangError error;
+          error.type = LangError::ShadowedSymbol;
+          error.filename = blockDecl->getFilename();
+          error.lineNumber = blockDecl->getLine();
+          error.errorTokens = {blockDecl->getName(), decl->getName(),
+                               shadowed->getFilename(),
+                               std::to_string(shadowed->getLine())};
+          errors.push_back(error);
+        }
+      }
+    }
+    // Nested code generators see these blocks as their parent scope.
+    scope.push_back({node, blocks->getChildren()});
+    validateShadowingInScope(scope, tree, errors);
+    scope.pop_back();
+  }
+}
+
+} // namespace
+
+void ASTValidation::validateShadowing(ASTNode tree,
+                                      std::vector<LangError> &errors) {
+  if (!tree) {
+    return;
+  }
+  ScopeStack scope{{nullptr, tree->getChildren()}};
+  validateShadowingInScope(scope, tree, errors);
 }
 
 void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,

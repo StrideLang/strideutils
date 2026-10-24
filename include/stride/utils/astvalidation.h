@@ -46,6 +46,13 @@ public:
                             std::string currentFramework = "",
                             std::set<const void *> *processedNodes = nullptr);
 
+  // Reactions and loops (code generators that are domain members) share the
+  // state of their domain. A block they declare with the name of a
+  // declaration in an enclosing scope hides it: their streams use the local
+  // block while code outside reads the other one. Reports each as a
+  // ShadowedSymbol error.
+  static void validateShadowing(ASTNode tree, std::vector<LangError> &errors);
+
   // Validate property types
   static bool isValidStringProperty(std::shared_ptr<DeclarationNode> decl,
                                     std::string propertyName,
