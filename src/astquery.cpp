@@ -694,7 +694,9 @@ std::shared_ptr<DeclarationNode> ASTQuery::synthesizeArrayDeclarationElement(
 
   std::shared_ptr<DeclarationNode> newDecl = std::make_shared<DeclarationNode>(
       arrayDeclaration->getName(), arrayDeclaration->getEntityType(), nullptr,
-      __FILE__, __LINE__);
+      arrayDeclaration->getFilename().c_str(), arrayDeclaration->getLine(),
+      arrayDeclaration->getColumn());
+  arrayDeclaration->copyLocationTo(newDecl);
   for (const auto &prop : arrayDeclaration->getProperties()) {
     auto value = prop->getValue();
     // TODO support more complex scenarios, e.g. entities that reference lists,
@@ -948,12 +950,15 @@ ASTQuery::getModuleEntities(std::shared_ptr<DeclarationNode> moduleDecl) {
         std::static_pointer_cast<ValueNode>(genVarProp)->getStringValue();
     std::string filename = moduleDecl->getFilename();
     int line = moduleDecl->getLine();
+    int column = moduleDecl->getColumn();
     auto genDecl = std::make_shared<DeclarationNode>(
-        genVarName, "signal", nullptr, filename.c_str(), line);
-    genDecl->addProperty(std::make_shared<PropertyNode>(
-        "type",
-        std::make_shared<EntityNode>("_IntType", filename.c_str(), line),
-        filename.c_str(), line));
+        genVarName, "signal", nullptr, filename.c_str(), line, column);
+    moduleDecl->copyLocationTo(genDecl);
+    auto entityType = std::make_shared<EntityNode>("_IntType", filename.c_str(), line, column);
+    moduleDecl->copyLocationTo(entityType);
+    auto propNode = std::make_shared<PropertyNode>("type", entityType, filename.c_str(), line, column);
+    moduleDecl->copyLocationTo(propNode);
+    genDecl->addProperty(propNode);
     blocks.push_back(genDecl);
   }
 

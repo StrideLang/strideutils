@@ -34,9 +34,12 @@ struct SerializedNodeRecord {
   uint8_t token{0};
   uint8_t subType{0};
   int32_t line{-1};
+  int32_t column{-1};
   int64_t intVal{0};
   double realVal{0.0};
   std::string filename;
+  std::string relativeFilename;
+  std::string absoluteFilename;
   std::string name;
   std::string secondaryStr;
   std::vector<std::string> scope;
@@ -83,7 +86,10 @@ private:
     const AST::Token tok = node->getNodeType();
     rec.token = static_cast<uint8_t>(tok);
     rec.line = node->getLine();
+    rec.column = node->getColumn();
     rec.filename = node->getFilename();
+    rec.relativeFilename = node->getRelativeFilename();
+    rec.absoluteFilename = node->getAbsoluteFilename();
     rec.scope = node->getNamespaceList();
 
     const auto &children = node->getChildren();
@@ -356,6 +362,11 @@ bool reconstructGraph(const SerializedASTGraph &graph,
     }
     default:
       return false;
+    }
+
+    if (created) {
+      created->setColumn(rec.column);
+      created->setFilenames(rec.relativeFilename, rec.absoluteFilename);
     }
 
     nodes[i + 1] = std::move(created);
