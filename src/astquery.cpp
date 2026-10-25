@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <map>
+#include <set>
 #include <iostream>
 #include <iterator>
 #include <sstream>
@@ -577,7 +579,7 @@ int ASTQuery::getArraySize(std::shared_ptr<ArrayNode> arrayNode,
       break;
     case AST::Expression:
       type = ASTQuery::getNodeSize(expr, scope, tree);
-      if (type == "_IntLiteral" || type == "_IntType") {
+      if (type == "_IntLiteral" || type == DataTypes::Int) {
         size += 1;
       } else {
         LOG_ERROR() << "Error, expression does not resolve to int" << std::endl;
@@ -1090,7 +1092,7 @@ ASTQuery::getModuleEntities(std::shared_ptr<DeclarationNode> moduleDecl) {
     auto genDecl = std::make_shared<DeclarationNode>(
         genVarName, "signal", nullptr, filename.c_str(), line, column);
     moduleDecl->copyLocationTo(genDecl);
-    auto entityType = std::make_shared<EntityNode>("_IntType", filename.c_str(), line, column);
+    auto entityType = std::make_shared<EntityNode>(DataTypes::Int, filename.c_str(), line, column);
     moduleDecl->copyLocationTo(entityType);
     auto propNode = std::make_shared<PropertyNode>("type", entityType, filename.c_str(), line, column);
     moduleDecl->copyLocationTo(propNode);
@@ -1785,4 +1787,289 @@ std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationByName(
   } else {
     return nullptr;
   }
+}
+
+// ---------------------------------------------------------------------------
+// DataTypes
+
+const std::string DataTypes::Real = "Real";
+const std::string DataTypes::Int = "Int";
+const std::string DataTypes::UInt = "UInt";
+const std::string DataTypes::Size = "Size";
+const std::string DataTypes::Switch = "Switch";
+const std::string DataTypes::String = "String";
+
+bool DataTypes::isDataTypeName(const std::string &name) {
+  return !name.empty() && name[0] != '_';
+}
+
+DataTypes::Info DataTypes::builtin(const std::string &name) {
+  struct Builtin {
+    const char *canonical;
+    Kind kind;
+    int bits;
+    bool isSigned;
+  };
+  static const std::map<std::string, Builtin> builtins = {
+      {"Int8", {"Int8", Kind::Integer, 8, true}},
+      {"Int16", {"Int16", Kind::Integer, 16, true}},
+      {"Int32", {"Int32", Kind::Integer, 32, true}},
+      {"Int64", {"Int64", Kind::Integer, 64, true}},
+      {"UInt8", {"UInt8", Kind::Integer, 8, false}},
+      {"UInt16", {"UInt16", Kind::Integer, 16, false}},
+      {"UInt32", {"UInt32", Kind::Integer, 32, false}},
+      {"UInt64", {"UInt64", Kind::Integer, 64, false}},
+      {"Float32", {"Float32", Kind::Float, 32, true}},
+      {"Float64", {"Float64", Kind::Float, 64, true}},
+      {"Switch", {"Switch", Kind::Switch, 1, false}},
+      {"String", {"String", Kind::String, 0, false}},
+      {"Int", {"Int32", Kind::Integer, 32, true}},
+      {"UInt", {"UInt32", Kind::Integer, 32, false}},
+      {"Real", {"Float64", Kind::Float, 64, true}},
+      {"Size", {"UInt64", Kind::Integer, 64, false}},
+  };
+  Info info;
+  info.name = name;
+  auto it = builtins.find(name);
+  if (it != builtins.end()) {
+    info.canonical = it->second.canonical;
+    info.kind = it->second.kind;
+    info.bits = it->second.bits;
+    info.isSigned = it->second.isSigned;
+  }
+  return info;
+}
+
+std::shared_ptr<DeclarationNode>
+DataTypes::findDeclaration(const std::string &name, ASTNode tree,
+                           const std::string &currentFramework) {
+  if (!tree) {
+    return nullptr;
+  }
+  // Framework data types overlay the dummy ones in the library, which have no
+  // framework.
+  std::shared_ptr<DeclarationNode> frameworkType;
+  std::shared_ptr<DeclarationNode> libraryType;
+  for (const ASTNode &node : tree->getChildren()) {
+    if (node->getNodeType() != AST::Declaration) {
+      continue;
+    }
+    auto decl = std::static_pointer_cast<DeclarationNode>(node);
+    if ((decl->getEntityType() != "frameworkDataType" &&
+         decl->getEntityType() != "alias") ||
+        decl->getName() != name) {
+      continue;
+    }
+    std::string framework;
+    auto frameworkNode = decl->getCompilerProperty("framework");
+    if (frameworkNode && frameworkNode->getNodeType() == AST::String) {
+      framework =
+          std::static_pointer_cast<ValueNode>(frameworkNode)->getStringValue();
+    }
+    if (framework.empty()) {
+      if (!libraryType) {
+        libraryType = decl;
+      }
+    } else if (framework == currentFramework) {
+      return decl;
+    } else if (!frameworkType) {
+      frameworkType = decl;
+    }
+  }
+  return frameworkType ? frameworkType : libraryType;
+}
+
+DataTypes::Info DataTypes::resolve(const std::string &name, ASTNode tree,
+                                   const std::string &currentFramework) {
+  Info info;
+  info.name = name;
+  std::string current = name;
+  std::set<std::string> visited;
+  while (true) {
+    auto decl = findDeclaration(current, tree, currentFramework);
+    if (!decl) {
+      auto fallback = builtin(current);
+      fallback.name = name;
+      return fallback;
+    }
+    if (!visited.insert(current).second) {
+      return info; // Alias cycle. ASTValidation reports it.
+    }
+    if (decl->getEntityType() == "alias") {
+      auto entity = decl->getPropertyValue("entity");
+      if (!entity || entity->getNodeType() != AST::Entity) {
+        return info; // Not an alias of a data type
+      }
+      current = ASTQuery::getNodeName(entity);
+      continue;
+    }
+    auto kindNode = decl->getPropertyValue("kind");
+    if (!kindNode || kindNode->getNodeType() != AST::String) {
+      // Library dummies have no kind. Use the builtin description.
+      auto fallback = builtin(current);
+      fallback.name = name;
+      return fallback;
+    }
+    auto kind = std::static_pointer_cast<ValueNode>(kindNode)->getStringValue();
+    info.canonical = current;
+    if (kind == "integer") {
+      info.kind = Kind::Integer;
+    } else if (kind == "float") {
+      info.kind = Kind::Float;
+    } else if (kind == "switch") {
+      info.kind = Kind::Switch;
+      info.bits = 1;
+    } else if (kind == "string") {
+      info.kind = Kind::String;
+    }
+    auto bitsNode = decl->getPropertyValue("bits");
+    if (bitsNode && bitsNode->getNodeType() == AST::Int) {
+      info.bits = static_cast<int>(
+          std::static_pointer_cast<ValueNode>(bitsNode)->getIntValue());
+    }
+    // The name sets the sign: UInt8..UInt64 are unsigned
+    if (info.kind == Kind::Integer) {
+      info.isSigned = current.rfind("UInt", 0) != 0;
+    }
+    if (info.kind == Kind::Switch || info.kind == Kind::String) {
+      info.isSigned = false;
+    }
+    return info;
+  }
+}
+
+std::string DataTypes::fixedTypeName(Kind kind, int bits, bool isSigned) {
+  if (kind == Kind::Float) {
+    return "Float" + std::to_string(bits);
+  }
+  if (kind == Kind::Integer) {
+    return (isSigned ? "Int" : "UInt") + std::to_string(bits);
+  }
+  return std::string();
+}
+
+std::string DataTypes::promote(const std::string &a, const std::string &b,
+                               ASTNode tree) {
+  if (a == b) {
+    return a;
+  }
+  auto infoA = resolve(a, tree);
+  auto infoB = resolve(b, tree);
+  if (!infoA.isNumeric() || !infoB.isNumeric()) {
+    return std::string();
+  }
+  if (infoA.canonical == infoB.canonical) {
+    return a;
+  }
+  if (infoA.isFloat() != infoB.isFloat()) {
+    return infoA.isFloat() ? a : b;
+  }
+  if (infoA.isFloat() || infoA.isSigned == infoB.isSigned) {
+    if (infoA.bits == infoB.bits) {
+      return a;
+    }
+    return infoA.bits > infoB.bits ? a : b;
+  }
+  // Signed and unsigned: a signed type that can hold the unsigned values
+  const auto &signedInfo = infoA.isSigned ? infoA : infoB;
+  const auto &unsignedInfo = infoA.isSigned ? infoB : infoA;
+  if (signedInfo.bits > unsignedInfo.bits) {
+    return infoA.isSigned ? a : b;
+  }
+  int bits = std::min(64, std::max(2 * unsignedInfo.bits, signedInfo.bits));
+  return fixedTypeName(Kind::Integer, bits, true);
+}
+
+namespace {
+// Integers up to this many bits convert to the float type exactly
+int floatMantissaBits(int floatBits) { return floatBits == 32 ? 24 : 53; }
+} // namespace
+
+std::string DataTypes::conversionRisk(const std::string &from,
+                                      const std::string &to, ASTNode tree) {
+  auto infoFrom = resolve(from, tree);
+  auto infoTo = resolve(to, tree);
+  if (!infoFrom.isNumeric() || !infoTo.isNumeric() ||
+      infoFrom.canonical == infoTo.canonical) {
+    return std::string();
+  }
+  if (infoFrom.isFloat() && infoTo.isInteger()) {
+    return "truncates the fractional part, and values outside the range of " +
+           to + " overflow";
+  }
+  if (infoFrom.isFloat() && infoTo.isFloat()) {
+    if (infoTo.bits < infoFrom.bits) {
+      return "loses precision and range";
+    }
+    return std::string();
+  }
+  if (infoFrom.isInteger() && infoTo.isFloat()) {
+    int valueBits = infoFrom.bits - (infoFrom.isSigned ? 1 : 0);
+    if (valueBits > floatMantissaBits(infoTo.bits)) {
+      return "rounds integers larger than 2^" +
+             std::to_string(floatMantissaBits(infoTo.bits));
+    }
+    return std::string();
+  }
+  // Integer to integer
+  if (infoFrom.isSigned && !infoTo.isSigned) {
+    if (infoTo.bits < infoFrom.bits) {
+      return "wraps negative values and values above the maximum of " + to;
+    }
+    return "wraps negative values";
+  }
+  if (!infoFrom.isSigned && infoTo.isSigned && infoTo.bits <= infoFrom.bits) {
+    return "wraps values above the maximum of " + to + " to negative values";
+  }
+  if (infoTo.bits < infoFrom.bits) {
+    return "wraps values outside the range of " + to;
+  }
+  return std::string();
+}
+
+std::string DataTypes::promotionRisk(const std::string &a,
+                                     const std::string &b, ASTNode tree) {
+  auto promoted = promote(a, b, tree);
+  if (promoted.empty()) {
+    return std::string();
+  }
+  for (const auto &operand : {a, b}) {
+    auto risk = conversionRisk(operand, promoted, tree);
+    if (!risk.empty()) {
+      return "mixes " + a + " and " + b + ". It " + risk + " of the " +
+             operand + " operand";
+    }
+  }
+  return std::string();
+}
+
+bool DataTypes::implicitlyConvertible(const std::string &from,
+                                      const std::string &to, ASTNode tree) {
+  if (from == to) {
+    return true;
+  }
+  auto infoFrom = resolve(from, tree);
+  auto infoTo = resolve(to, tree);
+  if (!infoFrom.valid() || !infoTo.valid()) {
+    return false;
+  }
+  if (infoFrom.canonical == infoTo.canonical) {
+    return true;
+  }
+  if (!infoFrom.isNumeric() || !infoTo.isNumeric()) {
+    return false;
+  }
+  if (infoTo.isFloat()) {
+    return infoFrom.isInteger() || infoTo.bits >= infoFrom.bits;
+  }
+  if (infoFrom.isFloat()) {
+    return false;
+  }
+  if (infoFrom.isSigned && !infoTo.isSigned) {
+    return false;
+  }
+  if (!infoFrom.isSigned && infoTo.isSigned) {
+    return infoTo.bits > infoFrom.bits;
+  }
+  return infoTo.bits >= infoFrom.bits;
 }

@@ -53,6 +53,15 @@ public:
   // ShadowedSymbol error.
   static void validateShadowing(ASTNode tree, std::vector<LangError> &errors);
 
+  // Data types (frameworkDataType: Int, Real, UInt8, ...) and schema types
+  // (type, typeClass and literals: _NumericTypes, _IntLiteral, ...) must not
+  // be confused. Data type names don't start with '_' and schema type names
+  // do. A declaration's type must be a data type, schema allowedTypes must
+  // list typeClasses rather than data types, aliases must point to a type
+  // that isn't an alias, and no block can take the name of a data type.
+  // Reports each as an InvalidDataType error.
+  static void validateDataTypes(ASTNode tree, std::vector<LangError> &errors);
+
   // Validate property types
   static bool isValidStringProperty(std::shared_ptr<DeclarationNode> decl,
                                     std::string propertyName,

@@ -21,6 +21,7 @@ std::vector<LangError> ASTValidation::validate(ASTNode tree) {
   std::set<const void *> processedNodes;
   validateTypes(tree, errors, {}, tree, {}, "", &processedNodes);
   validateShadowing(tree, errors);
+  validateDataTypes(tree, errors);
   return errors;
 }
 
@@ -100,6 +101,298 @@ void ASTValidation::validateShadowing(ASTNode tree,
   }
   ScopeStack scope{{nullptr, tree->getChildren()}};
   validateShadowingInScope(scope, tree, errors);
+}
+
+namespace {
+
+void addDataTypeError(const ASTNode &node, const std::string &name,
+                      const std::string &reason,
+                      std::vector<LangError> &errors) {
+  LangError error;
+  error.type = LangError::InvalidDataType;
+  error.filename = node->getFilename();
+  error.lineNumber = node->getLine();
+  error.errorTokens = {name, reason};
+  errors.push_back(error);
+}
+
+bool isNone(const ASTNode &node) {
+  return !node || node->getNodeType() == AST::None;
+}
+
+// Declared data types and aliases of them, and the builtin names even when a
+// block that takes their name keeps the declaration out of the tree.
+bool isDataType(const std::string &name, const ASTNode &tree) {
+  return DataTypes::isDataTypeName(name) &&
+         DataTypes::resolve(name, tree).valid();
+}
+
+bool isSchemaTypeName(const std::string &name, const ASTNode &tree) {
+  if (name.empty() || name[0] != '_') {
+    return false;
+  }
+  if (ASTQuery::findTypeClass(name, tree)) {
+    return true;
+  }
+  auto decl = ASTQuery::findDeclarationByName(name, {}, tree);
+  return decl && decl->getEntityType() == "type";
+}
+
+// Entity names listed in an allowedTypes value, including those inside
+// constrainedList and constrainedEntity.
+void collectAllowedTypeNames(const ASTNode &allowed,
+                             std::vector<ASTNode> &names) {
+  if (!allowed) {
+    return;
+  }
+  if (allowed->getNodeType() == AST::Entity) {
+    names.push_back(allowed);
+  } else if (allowed->getNodeType() == AST::List) {
+    for (const auto &child : allowed->getChildren()) {
+      collectAllowedTypeNames(child, names);
+    }
+  } else if (allowed->getNodeType() == AST::Declaration) {
+    auto decl = std::static_pointer_cast<DeclarationNode>(allowed);
+    collectAllowedTypeNames(decl->getPropertyValue("allowed"), names);
+  }
+}
+
+void validateFrameworkDataType(const std::shared_ptr<DeclarationNode> &decl,
+                               const ASTNode &tree,
+                               std::vector<LangError> &errors) {
+  const auto &name = decl->getName();
+  if (!DataTypes::isDataTypeName(name)) {
+    addDataTypeError(decl, name,
+                     "Data type names can't start with '_', which marks "
+                     "schema types.",
+                     errors);
+    return;
+  }
+  auto kind = decl->getPropertyValue("kind");
+  auto bits = decl->getPropertyValue("bits");
+  if (!kind || kind->getNodeType() != AST::String) {
+    addDataTypeError(decl, name,
+                     "A data type needs a kind (\"integer\", \"float\", "
+                     "\"switch\" or \"string\"). Other names for a type "
+                     "are aliases: alias " +
+                         name + " { block: Int32 }",
+                     errors);
+    return;
+  }
+  auto kindName = std::static_pointer_cast<ValueNode>(kind)->getStringValue();
+  int64_t bitCount = -1;
+  if (bits && bits->getNodeType() == AST::Int) {
+    bitCount = std::static_pointer_cast<ValueNode>(bits)->getIntValue();
+  }
+  if (kindName == "integer") {
+    if (bitCount != 8 && bitCount != 16 && bitCount != 32 && bitCount != 64) {
+      addDataTypeError(decl, name,
+                       "Integer types need bits: 8, 16, 32 or 64.", errors);
+    } else if (name != DataTypes::fixedTypeName(DataTypes::Kind::Integer,
+                                                 bitCount, true) &&
+               name != DataTypes::fixedTypeName(DataTypes::Kind::Integer,
+                                                 bitCount, false)) {
+      // The name is the only place the sign is set
+      addDataTypeError(decl, name,
+                       "An integer type with bits: " +
+                           std::to_string(bitCount) + " must be named Int" +
+                           std::to_string(bitCount) + " (signed) or UInt" +
+                           std::to_string(bitCount) +
+                           " (unsigned). Declare other names as an alias.",
+                       errors);
+    }
+  } else if (kindName == "float") {
+    if (bitCount != 32 && bitCount != 64) {
+      addDataTypeError(decl, name, "Float types need bits: 32 or 64.", errors);
+    } else if (name !=
+               DataTypes::fixedTypeName(DataTypes::Kind::Float, bitCount,
+                                        true)) {
+      addDataTypeError(decl, name,
+                       "A float type with bits: " + std::to_string(bitCount) +
+                           " must be named Float" + std::to_string(bitCount) +
+                           ". Declare other names as an alias.",
+                       errors);
+    }
+  } else if (kindName == "switch" || kindName == "string") {
+    if (!isNone(bits)) {
+      addDataTypeError(decl, name, "Switch and string types take no bits.",
+                       errors);
+    }
+  } else {
+    addDataTypeError(decl, name,
+                     "Unknown kind '" + kindName +
+                         "'. Use \"integer\", \"float\", \"switch\" or "
+                         "\"string\".",
+                     errors);
+  }
+}
+
+// Aliases of data types follow the naming of data types. Any alias that
+// leads back to itself is an error.
+void validateAlias(const std::shared_ptr<DeclarationNode> &decl,
+                   const ASTNode &tree, std::vector<LangError> &errors) {
+  std::vector<std::string> chain = {decl->getName()};
+  auto current = decl;
+  while (current && current->getEntityType() == "alias") {
+    auto entity = current->getPropertyValue("entity");
+    if (!entity || entity->getNodeType() != AST::Entity) {
+      return; // An alias of a value, e.g. PlatformRate
+    }
+    auto next = ASTQuery::getNodeName(entity);
+    if (std::find(chain.begin(), chain.end(), next) != chain.end()) {
+      std::string path;
+      for (const auto &name : chain) {
+        path += name + " -> ";
+      }
+      addDataTypeError(decl, decl->getName(),
+                       "The alias leads back to itself: " + path + next + ".",
+                       errors);
+      return;
+    }
+    chain.push_back(next);
+    current = ASTQuery::findDeclarationByName(next, {}, tree);
+  }
+  if (isDataType(chain.back(), tree) &&
+      !DataTypes::isDataTypeName(decl->getName())) {
+    addDataTypeError(decl, decl->getName(),
+                     "Aliases of data types can't start with '_', which marks "
+                     "schema types.",
+                     errors);
+  }
+}
+
+void validateTypeClass(const std::shared_ptr<DeclarationNode> &decl,
+                       const ASTNode &tree, std::vector<LangError> &errors) {
+  if (DataTypes::isDataTypeName(decl->getName())) {
+    addDataTypeError(decl, decl->getName(),
+                     "typeClass names must start with '_', which marks "
+                     "schema types.",
+                     errors);
+  }
+  auto types = decl->getPropertyValue("types");
+  if (!types) {
+    return;
+  }
+  for (const auto &member : types->getChildren()) {
+    auto memberName = ASTQuery::getNodeName(member);
+    if (member->getNodeType() != AST::Entity || !isDataType(memberName, tree)) {
+      addDataTypeError(member, memberName,
+                       "typeClass '" + decl->getName() +
+                           "' can only list data types.",
+                       errors);
+    }
+  }
+}
+
+void validateSchemaType(const std::shared_ptr<DeclarationNode> &decl,
+                        const ASTNode &tree, std::vector<LangError> &errors) {
+  if (DataTypes::isDataTypeName(decl->getName())) {
+    addDataTypeError(decl, decl->getName(),
+                     "type names must start with '_', which marks schema "
+                     "types.",
+                     errors);
+  }
+  auto properties = decl->getPropertyValue("properties");
+  if (!properties) {
+    return;
+  }
+  for (const auto &property : properties->getChildren()) {
+    if (property->getNodeType() != AST::Declaration) {
+      continue;
+    }
+    auto propertyDecl = std::static_pointer_cast<DeclarationNode>(property);
+    std::vector<ASTNode> allowedNames;
+    collectAllowedTypeNames(propertyDecl->getPropertyValue("allowedTypes"),
+                            allowedNames);
+    for (const auto &allowed : allowedNames) {
+      auto allowedName = ASTQuery::getNodeName(allowed);
+      if (isDataType(allowedName, tree)) {
+        addDataTypeError(allowed, allowedName,
+                         "allowedTypes in '" + decl->getName() +
+                             "' lists a data type. List a typeClass such as "
+                             "_NumericTypes instead.",
+                         errors);
+      }
+    }
+  }
+}
+
+// Checks the type property and the name of decl and of the blocks it
+// declares.
+void validateDeclarationDataTypes(const std::shared_ptr<DeclarationNode> &decl,
+                                  const ASTNode &tree,
+                                  std::vector<LangError> &errors,
+                                  std::set<const void *> &visited) {
+  if (!visited.insert(decl.get()).second) {
+    return;
+  }
+  const auto &entityType = decl->getEntityType();
+  if (entityType == "frameworkDataType" || entityType == "typeClass" ||
+      entityType == "type" || entityType == "alias") {
+    return;
+  }
+  if (isDataType(decl->getName(), tree)) {
+    addDataTypeError(decl, decl->getName(),
+                     "This name belongs to a data type. Rename the " +
+                         entityType + ".",
+                     errors);
+  }
+  auto type = decl->getPropertyValue("type");
+  if (type && type->getNodeType() == AST::Entity) {
+    auto typeName = ASTQuery::getNodeName(type);
+    if (isSchemaTypeName(typeName, tree)) {
+      addDataTypeError(type, typeName,
+                       "It is a schema type, not a data type. Use a data "
+                       "type such as Int or Real.",
+                       errors);
+    }
+  }
+  for (const auto &property : decl->getProperties()) {
+    auto value = property->getValue();
+    if (!value) {
+      continue;
+    }
+    std::vector<ASTNode> children;
+    if (value->getNodeType() == AST::List) {
+      children = value->getChildren();
+    } else {
+      children.push_back(value);
+    }
+    for (const auto &child : children) {
+      if (isDeclarationNode(child)) {
+        validateDeclarationDataTypes(
+            std::static_pointer_cast<DeclarationNode>(child), tree, errors,
+            visited);
+      }
+    }
+  }
+}
+
+} // namespace
+
+void ASTValidation::validateDataTypes(ASTNode tree,
+                                      std::vector<LangError> &errors) {
+  if (!tree) {
+    return;
+  }
+  std::set<const void *> visited;
+  for (const auto &node : tree->getChildren()) {
+    if (!isDeclarationNode(node)) {
+      continue;
+    }
+    auto decl = std::static_pointer_cast<DeclarationNode>(node);
+    if (decl->getEntityType() == "frameworkDataType") {
+      validateFrameworkDataType(decl, tree, errors);
+    } else if (decl->getEntityType() == "typeClass") {
+      validateTypeClass(decl, tree, errors);
+    } else if (decl->getEntityType() == "type") {
+      validateSchemaType(decl, tree, errors);
+    } else if (decl->getEntityType() == "alias") {
+      validateAlias(decl, tree, errors);
+    } else {
+      validateDeclarationDataTypes(decl, tree, errors, visited);
+    }
+  }
 }
 
 void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
@@ -1624,21 +1917,22 @@ bool ASTValidation::matchesAllowedType(
             validTypes.end() ||
         std::find(validTypes.begin(), validTypes.end(), "_PortProperty") !=
             validTypes.end() ||
-        std::find(validTypes.begin(), validTypes.end(), "_IntType") !=
-            validTypes.end() ||
-        std::find(validTypes.begin(), validTypes.end(), "_RealType") !=
-            validTypes.end() ||
         std::find(validTypes.begin(), validTypes.end(), "_DomainDefinition") !=
             validTypes.end() ||
         std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") !=
-            validTypes.end() ||
-        std::find(validTypes.begin(), validTypes.end(), "_SwitchType") !=
             validTypes.end() ||
         std::find(validTypes.begin(), validTypes.end(), "_Any") !=
             validTypes.end() ||
         std::find(validTypes.begin(), validTypes.end(), "_MemberAccess") !=
             validTypes.end()) {
       return true;
+    }
+    // A typeClass in allowedTypes expands to its data types
+    for (const auto &validType : validTypes) {
+      if (DataTypes::isDataTypeName(validType) &&
+          DataTypes::resolve(validType, tree).valid()) {
+        return true;
+      }
     }
   }
 

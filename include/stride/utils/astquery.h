@@ -229,6 +229,86 @@ private:
                              std::shared_ptr<DeclarationNode> decl,
                              std::string currentFramework = "");
 };
+
+// Data types are the frameworkDataType declarations users write (Int, Real,
+// UInt8, Float32, ...). Each framework declares them in its platformlib.
+// Schema validation types (_NumericTypes, _IntLiteral, ...) start with '_' and
+// are never data types.
+namespace DataTypes {
+// Names the compiler uses for literals and builtin declarations. Int, UInt,
+// Real and Size are aliases whose size each framework decides.
+extern const std::string Real;
+extern const std::string Int;
+extern const std::string UInt;
+extern const std::string Size;
+extern const std::string Switch;
+extern const std::string String;
+
+enum class Kind { Unknown, Integer, Float, Switch, String };
+
+struct Info {
+  std::string name;      // As written, e.g. "Int"
+  std::string canonical; // After following aliases, e.g. "Int32"
+  Kind kind{Kind::Unknown};
+  int bits{0};
+  bool isSigned{true};
+
+  bool valid() const { return kind != Kind::Unknown; }
+  bool isNumeric() const { return kind == Kind::Integer || kind == Kind::Float; }
+  bool isInteger() const { return kind == Kind::Integer; }
+  bool isFloat() const { return kind == Kind::Float; }
+};
+
+// A data type name is not empty and does not start with '_'.
+bool isDataTypeName(const std::string &name);
+
+// The fixed types and the default sizes of the aliases (Int is Int32, UInt is
+// UInt32, Real is Float64 and Size is UInt64). Used when no frameworkDataType
+// declaration is available.
+Info builtin(const std::string &name);
+
+// Finds the frameworkDataType or alias declaration in the root of tree.
+// Prefers the one from currentFramework over the one in the library.
+std::shared_ptr<DeclarationNode>
+findDeclaration(const std::string &name, ASTNode tree,
+                const std::string &currentFramework = "");
+
+// Describes name from its declaration in tree. Aliases (alias Int { block:
+// Int32 }) are followed to any depth. Falls back to builtin() for types
+// without a declaration. Not valid() for an alias cycle.
+Info resolve(const std::string &name, ASTNode tree = nullptr,
+             const std::string &currentFramework = "");
+
+// Integer types are named by size and sign: Int8..Int64 are signed and
+// UInt8..UInt64 unsigned. Float types are Float32 and Float64. Returns the
+// expected name for an integer or float, e.g. "UInt16".
+std::string fixedTypeName(Kind kind, int bits, bool isSigned);
+
+// The type of an operation that mixes a and b. Float wins over integer, then
+// for floats the wider type wins. Integers of the same sign take the wider
+// type. Mixing signed and unsigned gives a signed type that holds both: the
+// signed type if it is wider, otherwise a signed type twice as wide as the
+// unsigned one (up to Int64). Empty if a and b can't be mixed.
+std::string promote(const std::string &a, const std::string &b,
+                    ASTNode tree = nullptr);
+
+// Why converting a value of type from to type to can lose data or change
+// it, e.g. "truncates the fractional part". Empty when every value of from
+// is kept.
+std::string conversionRisk(const std::string &from, const std::string &to,
+                           ASTNode tree = nullptr);
+
+// Why converting the operands of an operation mixing a and b to their
+// promoted type can lose data, e.g. UInt64 and Int8 give Int64, which can't
+// hold the largest UInt64 values. Empty when it can't.
+std::string promotionRisk(const std::string &a, const std::string &b,
+                          ASTNode tree = nullptr);
+
+// Whether a value of type from can be used where to is expected without
+// losing range: integer to float, and integer or float widening.
+bool implicitlyConvertible(const std::string &from, const std::string &to,
+                           ASTNode tree = nullptr);
+} // namespace DataTypes
 } // namespace strd
 
 #endif // ASTQUERY_H
