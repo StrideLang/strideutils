@@ -1071,7 +1071,31 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
       return newValue;
     }
   } else if (value->getNodeType() == AST::Array) {
-    // What does this mean??
+    // An element of a constant array with a constant index
+    auto arrayNode = std::static_pointer_cast<ArrayNode>(value);
+    auto index = arrayNode->index();
+    std::shared_ptr<DeclarationNode> decl = ASTQuery::findDeclarationByName(
+        arrayNode->getName(), scope, tree, arrayNode->getNamespaceList(),
+        framework);
+    if (decl && decl->getNodeType() == AST::ArrayDeclaration &&
+        ASTQuery::isConstant(decl, scope, tree) && index &&
+        index->getChildren().size() == 1) {
+      std::vector<LangError> errors;
+      int64_t i = evaluateConstInteger(index->getChildren().at(0), scope, tree,
+                                       &errors);
+      ASTNode values = decl->getPropertyValue("value");
+      if (errors.empty() && values && values->getNodeType() == AST::List &&
+          i >= 0 && i < static_cast<int64_t>(values->getChildren().size())) {
+        ASTNode element = values->getChildren().at(i);
+        if (element->getNodeType() == AST::Int ||
+            element->getNodeType() == AST::Real ||
+            element->getNodeType() == AST::String) {
+          element = element->deepCopy();
+          element->setCompilerProperty("resolvedFrom", decl);
+          return std::static_pointer_cast<ValueNode>(element);
+        }
+      }
+    }
   } else if (value->getNodeType() == AST::MemberAccess) {
     MemberAccessNode *propertyNode =
         static_cast<MemberAccessNode *>(value.get());
