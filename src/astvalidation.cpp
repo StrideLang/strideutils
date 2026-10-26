@@ -1,4 +1,5 @@
 #include "stride/utils/astvalidation.h"
+#include "stride/utils/astfunctions.h"
 #include "stride/utils/astquery.h"
 #include "stride/utils/logger.h"
 
@@ -1567,6 +1568,11 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
     return std::string("_GeneratorRange");
   } else if (child->getNodeType() == AST::Stream) {
     return std::string("_StreamType");
+  } else if (child->getNodeType() == AST::Expression) {
+    auto resolved = ASTFunctions::resolveConstant(child, scopeStack, tree, currentFramework);
+    if (resolved) {
+      return getTypeName(resolved, scopeStack, tree, parentNamespace, currentFramework);
+    }
   }
   return std::string();
 }
@@ -1868,6 +1874,12 @@ bool ASTValidation::matchesAllowedType(
   }
 
   // 2. Literals and built-in AST types
+  if (element->getNodeType() == AST::Expression) {
+    auto resolved = ASTFunctions::resolveConstant(element, scopeStack, tree, currentFramework);
+    if (resolved) {
+      return matchesAllowedType(resolved, validTypes, scopeStack, tree, parentNamespace, currentFramework);
+    }
+  }
   if (element->getNodeType() == AST::String) {
     return std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") !=
            validTypes.end();
