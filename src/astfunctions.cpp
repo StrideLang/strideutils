@@ -811,7 +811,8 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       if (newValue) {
         stream->setLeft(newValue);
       }
-    } else if (stream->getLeft()->getNodeType() == AST::Entity) {
+    } else if (stream->getLeft()->getNodeType() == AST::Entity ||
+               stream->getLeft()->getNodeType() == AST::Array) {
       std::shared_ptr<ValueNode> newValue =
           ASTFunctions::resolveConstant(stream->getLeft(), scope, tree);
       if (newValue) {
