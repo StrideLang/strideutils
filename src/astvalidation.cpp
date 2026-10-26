@@ -1571,7 +1571,10 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
   } else if (child->getNodeType() == AST::Expression) {
     auto resolved = ASTFunctions::resolveConstant(child, scopeStack, tree, currentFramework);
     if (resolved) {
-      return getTypeName(resolved, scopeStack, tree, parentNamespace, currentFramework);
+      if (resolved->getNodeType() == AST::Int) return "_IntLiteral";
+      if (resolved->getNodeType() == AST::Real) return "_RealLiteral";
+      if (resolved->getNodeType() == AST::String) return "_StringLiteral";
+      if (resolved->getNodeType() == AST::Switch) return "_SwitchLiteral";
     }
   }
   return std::string();
@@ -1877,7 +1880,18 @@ bool ASTValidation::matchesAllowedType(
   if (element->getNodeType() == AST::Expression) {
     auto resolved = ASTFunctions::resolveConstant(element, scopeStack, tree, currentFramework);
     if (resolved) {
-      return matchesAllowedType(resolved, validTypes, scopeStack, tree, parentNamespace, currentFramework);
+      if (resolved->getNodeType() == AST::Int) {
+        return std::find(validTypes.begin(), validTypes.end(), "_IntLiteral") != validTypes.end();
+      }
+      if (resolved->getNodeType() == AST::Real) {
+        return std::find(validTypes.begin(), validTypes.end(), "_RealLiteral") != validTypes.end();
+      }
+      if (resolved->getNodeType() == AST::String) {
+        return std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") != validTypes.end();
+      }
+      if (resolved->getNodeType() == AST::Switch) {
+        return std::find(validTypes.begin(), validTypes.end(), "_SwitchLiteral") != validTypes.end();
+      }
     }
   }
   if (element->getNodeType() == AST::String) {
