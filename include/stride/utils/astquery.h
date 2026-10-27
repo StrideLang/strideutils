@@ -195,6 +195,20 @@ public:
   findPropertyByName(std::vector<std::shared_ptr<PropertyNode>> properties,
                      std::string propertyName);
 
+  // Source location and scope queries
+  static ASTNode findNodeAt(ASTNode tree, int line, int column);
+  static ScopeStack getEnclosingScopeAt(ASTNode tree, int line, int column);
+
+  // Property and schema queries
+  static std::shared_ptr<DeclarationNode>
+  findPropertyDeclaration(std::shared_ptr<DeclarationNode> entityOrTypeDecl,
+                          const std::string &propertyName,
+                          const ScopeStack &scope, ASTNode tree);
+
+  static std::vector<std::shared_ptr<DeclarationNode>>
+  getAllAllowedProperties(std::shared_ptr<DeclarationNode> entityOrTypeDecl,
+                          const ScopeStack &scope, ASTNode tree);
+
   static bool isCodeGenerator(std::shared_ptr<DeclarationNode> typeDecl,
                               const ScopeStack &scope, ASTNode tree);
   static bool isConstant(std::shared_ptr<DeclarationNode> typeDecl,

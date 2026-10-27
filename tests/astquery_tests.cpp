@@ -227,3 +227,47 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksSchemaReflection) {
   EXPECT_EQ(pipeBlocks[0].streams[0], sPipe);
 }
 
+TEST_F(ASTQueryTest, FindNodeAtAndEnclosingScope) {
+  // Line 1: module QueryTest
+  auto nodeAtModule = ASTQuery::findNodeAt(tree, 1, 8);
+  ASSERT_NE(nodeAtModule, nullptr);
+  EXPECT_EQ(nodeAtModule->getNodeType(), AST::Declaration);
+  EXPECT_EQ(std::static_pointer_cast<DeclarationNode>(nodeAtModule)->getName(), "QueryTest");
+
+  // Line 15: constant MyConstant { value: 42 }
+  auto nodeAtConstant = ASTQuery::findNodeAt(tree, 15, 18);
+  ASSERT_NE(nodeAtConstant, nullptr);
+
+  // Enclosing scope at line 15, inside blocks of QueryTest
+  auto scope = ASTQuery::getEnclosingScopeAt(tree, 15, 18);
+  ASSERT_GE(scope.size(), 2u);
+  // Outer frame is root, second frame is QueryTest blocks
+  auto enclosingDecl = std::static_pointer_cast<DeclarationNode>(scope[1].first);
+  EXPECT_EQ(enclosingDecl->getName(), "QueryTest");
+}
+
+TEST_F(ASTQueryTest, PropertyDeclarationQueries) {
+  auto queryTestDecl = ASTQuery::findDeclarationByName("QueryTest", {}, tree);
+  ASSERT_NE(queryTestDecl, nullptr);
+  ScopeStack scope = {
+      {queryTestDecl,
+       queryTestDecl->getPropertyValue("blocks")->getChildren()}};
+
+  auto inBlockDecl = ASTQuery::findDeclarationByName("InBlock", scope, tree);
+  ASSERT_NE(inBlockDecl, nullptr);
+
+  // Signal inherits from _SignalType and should have allowed properties like "default" and "rate"
+  auto allSignalProps = ASTQuery::getAllAllowedProperties(inBlockDecl, scope, tree);
+  EXPECT_FALSE(allSignalProps.empty());
+
+  auto defaultProp = ASTQuery::findPropertyDeclaration(inBlockDecl, "default", scope, tree);
+  ASSERT_NE(defaultProp, nullptr);
+  auto nameVal = defaultProp->getPropertyValue("name");
+  ASSERT_NE(nameVal, nullptr);
+  EXPECT_EQ(std::static_pointer_cast<ValueNode>(nameVal)->getStringValue(), "default");
+
+  // Non-existent property returns nullptr
+  auto nonExistent = ASTQuery::findPropertyDeclaration(inBlockDecl, "nonExistentField", scope, tree);
+  EXPECT_EQ(nonExistent, nullptr);
+}
+

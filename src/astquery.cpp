@@ -10,6 +10,7 @@
 #include <iostream>
 #include <iterator>
 #include <sstream>
+#include <functional>
 
 using namespace strd;
 
@@ -796,7 +797,7 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
           if (errors) {
             LangError error;
             error.type = LangError::InvalidIndexType;
-            error.lineNumber = exp->getLine();
+            exp->copyLocationTo(error);
             error.errorTokens.push_back(arrayNode->getName());
             errors->push_back(error);
           }
@@ -1428,7 +1429,7 @@ ASTNode ASTQuery::getMemberFromList(ListNode *node, int index,
   if (index < 1 || index > (int)node->getChildren().size()) {
     LangError error;
     error.type = LangError::ArrayIndexOutOfBounds;
-    error.lineNumber = node->getLine();
+    node->copyLocationTo(error);
     error.errorTokens.push_back(std::to_string(index));
     errors->push_back(error);
     return nullptr;
@@ -1442,6 +1443,149 @@ std::shared_ptr<PropertyNode> ASTQuery::findPropertyByName(
   for (auto property : properties) {
     if (property->getName() == propertyName) {
       return property;
+    }
+  }
+  return nullptr;
+}
+
+namespace {
+bool nodeContainsPosition(const ASTNode &node, int line, int column) {
+  if (!node) {
+    return false;
+  }
+  int startLine = node->getLine();
+  if (startLine <= 0) {
+    return false;
+  }
+  int endLine = node->getEndLine();
+  if (endLine <= 0) {
+    if (line != startLine) {
+      return false;
+    }
+    int startCol = node->getColumn();
+    return startCol <= 0 || column >= startCol;
+  }
+  if (line < startLine || line > endLine) {
+    return false;
+  }
+  if (line == startLine) {
+    int startCol = node->getColumn();
+    if (startCol > 0 && column < startCol) {
+      return false;
+    }
+  }
+  if (line == endLine) {
+    int endCol = node->getEndColumn();
+    if (endCol > 0 && column > endCol) {
+      return false;
+    }
+  }
+  return true;
+}
+} // namespace
+
+ASTNode ASTQuery::findNodeAt(ASTNode tree, int line, int column) {
+  if (!tree) {
+    return nullptr;
+  }
+  if (tree->getLine() > 0 && !nodeContainsPosition(tree, line, column)) {
+    return nullptr;
+  }
+
+  // Check children for a tighter match
+  for (const auto &child : tree->getChildren()) {
+    if (nodeContainsPosition(child, line, column)) {
+      auto deeper = findNodeAt(child, line, column);
+      if (deeper) {
+        return deeper;
+      }
+      return child;
+    }
+  }
+
+  // If this node is a DeclarationNode, also check its properties
+  if (tree->getNodeType() == AST::Declaration) {
+    auto decl = std::static_pointer_cast<DeclarationNode>(tree);
+    for (const auto &prop : decl->getProperties()) {
+      if (nodeContainsPosition(prop, line, column)) {
+        auto deeper = findNodeAt(prop, line, column);
+        if (deeper) {
+          return deeper;
+        }
+        return prop;
+      }
+    }
+  }
+
+  return (tree->getLine() > 0) ? tree : nullptr;
+}
+
+ScopeStack ASTQuery::getEnclosingScopeAt(ASTNode tree, int line, int column) {
+  ScopeStack scope;
+  if (!tree) {
+    return scope;
+  }
+  scope.push_back({nullptr, tree->getChildren()});
+
+  std::function<void(const ASTNode &)> traverse = [&](const ASTNode &node) {
+    if (!node) {
+      return;
+    }
+    for (const auto &child : node->getChildren()) {
+      if (child && child->getNodeType() == AST::Declaration &&
+          nodeContainsPosition(child, line, column)) {
+        auto decl = std::static_pointer_cast<DeclarationNode>(child);
+        auto blocks = decl->getPropertyValue("blocks");
+        if (blocks && blocks->getNodeType() == AST::List) {
+          scope.push_back({decl, blocks->getChildren()});
+        } else {
+          scope.push_back({decl, decl->getChildren()});
+        }
+        traverse(child);
+        break;
+      }
+    }
+  };
+
+  traverse(tree);
+  return scope;
+}
+
+std::vector<std::shared_ptr<DeclarationNode>>
+ASTQuery::getAllAllowedProperties(std::shared_ptr<DeclarationNode> entityOrTypeDecl,
+                                  const ScopeStack &scope, ASTNode tree) {
+  std::vector<std::shared_ptr<DeclarationNode>> result;
+  if (!entityOrTypeDecl) {
+    return result;
+  }
+  std::shared_ptr<DeclarationNode> typeDecl = entityOrTypeDecl;
+  if (entityOrTypeDecl->getEntityType() != "type") {
+    typeDecl = findTypeDeclaration(entityOrTypeDecl, scope, tree);
+  }
+  if (!typeDecl) {
+    return result;
+  }
+  auto ports = getPortsForTypeEntity(typeDecl, scope, tree);
+  for (const auto &p : ports) {
+    if (p && p->getNodeType() == AST::Declaration) {
+      result.push_back(std::static_pointer_cast<DeclarationNode>(p));
+    }
+  }
+  return result;
+}
+
+std::shared_ptr<DeclarationNode>
+ASTQuery::findPropertyDeclaration(std::shared_ptr<DeclarationNode> entityOrTypeDecl,
+                                  const std::string &propertyName,
+                                  const ScopeStack &scope, ASTNode tree) {
+  auto allProps = getAllAllowedProperties(entityOrTypeDecl, scope, tree);
+  for (const auto &propDecl : allProps) {
+    auto nameProp = propDecl->getPropertyValue("name");
+    if (nameProp && nameProp->getNodeType() == AST::String) {
+      if (std::static_pointer_cast<ValueNode>(nameProp)->getStringValue() ==
+          propertyName) {
+        return propDecl;
+      }
     }
   }
   return nullptr;
