@@ -909,7 +909,7 @@ ASTQuery::getInheritedTypes(std::shared_ptr<DeclarationNode> entityTypeDecl,
         }
       }
     } else if (inherits->getNodeType() == AST::String) {
-      assert(0 == 1); // Disallowed
+      // String inherits is for framework inheritance, not type inheritance.
     } else if (inherits->getNodeType() == AST::Entity) {
       auto inheritsEntity = std::static_pointer_cast<EntityNode>(inherits);
       std::shared_ptr<DeclarationNode> inheritedDeclaration =

@@ -344,7 +344,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
       }
 
       if (auto decl = ASTQuery::findDeclarationByName(
-              usedDecl->getName(), ScopeStack(), tree, namespaceTree, fw)) {
+              ASTQuery::getNodeName(usedDecl), ScopeStack(), tree, namespaceTree, fw)) {
         auto atProp = decl->getCompilerProperty("_at");
         auto usedDeclAtProp = usedDecl->getCompilerProperty("_at");
         if (atProp && usedDeclAtProp) {
@@ -469,12 +469,12 @@ void ASTFunctions::insertRequiredObjectsForNode(
     EntityNode *name = static_cast<EntityNode *>(node.get());
 
     auto declaration = ASTQuery::findDeclarationByName(
-        name->getName(), {}, tree, name->getNamespaceList(), currentFramework);
+        ASTQuery::getNodeName(node), {}, tree, name->getNamespaceList(), currentFramework);
 
     if (!declaration) {
       for (auto it = objects.begin(); it != objects.end(); it++) {
         auto newDeclarations = ASTQuery::findAllDeclarations(
-            name->getName(), {{nullptr, it->second}}, nullptr,
+            ASTQuery::getNodeName(node), {{nullptr, it->second}}, nullptr,
             name->getNamespaceList(), currentFramework);
 
         for (const auto &newDecl : newDeclarations) {
@@ -502,7 +502,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
         //          namespaceList.erase(namespaceList.begin());
         //        }
         auto existingDeclaration = ASTQuery::findDeclarationByName(
-            usedEntity->getName(), {}, tree, namespaceList, framework);
+            ASTQuery::getNodeName(usedEntity), {}, tree, namespaceList, framework);
         if (!existingDeclaration) {
           tree->addChild(usedEntity);
         }
@@ -514,12 +514,12 @@ void ASTFunctions::insertRequiredObjectsForNode(
     std::vector<std::shared_ptr<DeclarationNode>> blockList;
     auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
     auto declaration = ASTQuery::findDeclarationByName(
-        arrayNode->getName(), {}, tree, arrayNode->getNamespaceList(),
+        ASTQuery::getNodeName(node), {}, tree, arrayNode->getNamespaceList(),
         currentFramework);
     if (!declaration) {
       for (auto it = objects.begin(); it != objects.end(); it++) {
         auto newDeclarations = ASTQuery::findAllDeclarations(
-            arrayNode->getName(), {{nullptr, it->second}}, nullptr,
+            ASTQuery::getNodeName(node), {{nullptr, it->second}}, nullptr,
             arrayNode->getNamespaceList(), currentFramework);
         for (const auto &newDecl : newDeclarations) {
           if (std::find(blockList.begin(), blockList.end(), newDecl) ==
@@ -541,7 +541,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
                           ->getStringValue();
         }
         auto existingDeclaration = ASTQuery::findDeclarationByName(
-            usedEntity->getName(), {}, tree, usedEntity->getNamespaceList(),
+            ASTQuery::getNodeName(usedEntity), {}, tree, usedEntity->getNamespaceList(),
             framework);
         if (!existingDeclaration) {
           tree->addChild(usedEntity);
