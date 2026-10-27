@@ -13,6 +13,44 @@
 
 using namespace strd;
 
+namespace {
+bool declMatchesNameAndAt(const std::string &objectName,
+                          const std::shared_ptr<DeclarationNode> &decl) {
+  if (!decl) {
+    return false;
+  }
+  size_t atPos = objectName.find('@');
+  if (atPos != std::string::npos) {
+    std::string nameWithoutAt = objectName.substr(0, atPos);
+    std::string atTag = objectName.substr(atPos + 1);
+    if (decl->getName() == nameWithoutAt) {
+      auto atProp = decl->getCompilerProperty("_at");
+      if (atProp) {
+        if (atProp->getNodeType() == AST::String) {
+          auto valNode = std::static_pointer_cast<ValueNode>(atProp);
+          if (valNode->getStringValue() == atTag) {
+            return true;
+          }
+        } else if (atProp->getNodeType() == AST::Int) {
+          auto valNode = std::static_pointer_cast<ValueNode>(atProp);
+          if (std::to_string(valNode->getIntValue()) == atTag) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+  if (decl->getName() == objectName) {
+    auto atProp = decl->getCompilerProperty("_at");
+    if (!atProp) {
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
+
 std::vector<StreamBlockDescriptor>
 ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
                                    const ScopeStack &scope, ASTNode tree) {
@@ -328,8 +366,7 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
           scopeNode->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(scopeNode);
-        std::string name = decl->getName();
-        if (name == objectName) {
+        if (declMatchesNameAndAt(objectName, decl)) {
           if (ASTQuery::namespaceMatch(scopesList, decl, currentFramework)) {
             if (std::find(decls.begin(), decls.end(), decl) == decls.end()) {
               decls.push_back(decl);
@@ -358,7 +395,7 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
           node->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(node);
-        if (decl->getName() == objectName) {
+        if (declMatchesNameAndAt(objectName, decl)) {
           if (ASTQuery::namespaceMatch(scopesList, decl, currentFramework)) {
             if (std::find(decls.begin(), decls.end(), decl) == decls.end()) {
               decls.push_back(decl);
@@ -453,13 +490,40 @@ std::string ASTQuery::getNodeName(ASTNode node) {
   }
   if (node->getNodeType() == AST::Entity) {
     EntityNode *name = static_cast<EntityNode *>(node.get());
-    return name->getName();
+    std::string n = name->getName();
+    auto atProp = node->getCompilerProperty("_at");
+    if (atProp) {
+      if (atProp->getNodeType() == AST::String) {
+        n += "@" + std::static_pointer_cast<ValueNode>(atProp)->getStringValue();
+      } else if (atProp->getNodeType() == AST::Int) {
+        n += "@" + std::to_string(std::static_pointer_cast<ValueNode>(atProp)->getIntValue());
+      }
+    }
+    return n;
   } else if (node->getNodeType() == AST::Array) {
     ArrayNode *arrayNode = static_cast<ArrayNode *>(node.get());
-    return arrayNode->getName();
+    std::string n = arrayNode->getName();
+    auto atProp = node->getCompilerProperty("_at");
+    if (atProp) {
+      if (atProp->getNodeType() == AST::String) {
+        n += "@" + std::static_pointer_cast<ValueNode>(atProp)->getStringValue();
+      } else if (atProp->getNodeType() == AST::Int) {
+        n += "@" + std::to_string(std::static_pointer_cast<ValueNode>(atProp)->getIntValue());
+      }
+    }
+    return n;
   } else if (node->getNodeType() == AST::Function) {
     FunctionNode *func = static_cast<FunctionNode *>(node.get());
-    return func->getName();
+    std::string n = func->getName();
+    auto atProp = node->getCompilerProperty("_at");
+    if (atProp) {
+      if (atProp->getNodeType() == AST::String) {
+        n += "@" + std::static_pointer_cast<ValueNode>(atProp)->getStringValue();
+      } else if (atProp->getNodeType() == AST::Int) {
+        n += "@" + std::to_string(std::static_pointer_cast<ValueNode>(atProp)->getIntValue());
+      }
+    }
+    return n;
   } else if (node->getNodeType() == AST::List) {
     std::string listCommonName;
     for (const auto &elem : node->getChildren()) {
@@ -474,7 +538,16 @@ std::string ASTQuery::getNodeName(ASTNode node) {
   } else if (node->getNodeType() == AST::Declaration ||
              node->getNodeType() == AST::ArrayDeclaration) {
     auto decl = std::static_pointer_cast<DeclarationNode>(node);
-    return decl->getName();
+    std::string n = decl->getName();
+    auto atProp = node->getCompilerProperty("_at");
+    if (atProp) {
+      if (atProp->getNodeType() == AST::String) {
+        n += "@" + std::static_pointer_cast<ValueNode>(atProp)->getStringValue();
+      } else if (atProp->getNodeType() == AST::Int) {
+        n += "@" + std::to_string(std::static_pointer_cast<ValueNode>(atProp)->getIntValue());
+      }
+    }
+    return n;
   } else if (node->getNodeType() == AST::Expression) {
     auto expr = std::static_pointer_cast<ExpressionNode>(node);
     if (expr->isUnary()) {
@@ -1746,8 +1819,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationByName(
           scopeNode->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(scopeNode);
-        std::string name = decl->getName();
-        if (name == objectName) {
+        if (declMatchesNameAndAt(objectName, decl)) {
           if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
             return decl;
           }
@@ -1761,7 +1833,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationByName(
           node->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(node);
-        if (decl->getName() == objectName) {
+        if (declMatchesNameAndAt(objectName, decl)) {
           if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
             if (framework.size() > 0) {
               auto platformNode = decl->getCompilerProperty("framework");
