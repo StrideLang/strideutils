@@ -298,7 +298,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
       effectiveScope->push_back({nullptr, it->second});
 
       std::vector<std::shared_ptr<DeclarationNode>> alldecls =
-          ASTQuery::findAllDeclarations(func->getName(), *effectiveScope,
+          ASTQuery::findAllDeclarations(ASTQuery::getNodeName(node), *effectiveScope,
                                         nullptr, func->getNamespaceList(),
                                         currentFramework);
       effectiveScope->pop_back();
@@ -470,6 +470,11 @@ void ASTFunctions::insertRequiredObjectsForNode(
 
     auto declaration = ASTQuery::findDeclarationByName(
         ASTQuery::getNodeName(node), {}, tree, name->getNamespaceList(), currentFramework);
+    if (declaration &&
+        (declaration->getCompilerProperty("_at") != nullptr) !=
+            (node->getCompilerProperty("_at") != nullptr)) {
+      declaration = nullptr;
+    }
 
     if (!declaration) {
       for (auto it = objects.begin(); it != objects.end(); it++) {
@@ -503,6 +508,11 @@ void ASTFunctions::insertRequiredObjectsForNode(
         //        }
         auto existingDeclaration = ASTQuery::findDeclarationByName(
             ASTQuery::getNodeName(usedEntity), {}, tree, namespaceList, framework);
+        if (existingDeclaration &&
+            (existingDeclaration->getCompilerProperty("_at") != nullptr) !=
+                (usedEntity->getCompilerProperty("_at") != nullptr)) {
+          existingDeclaration = nullptr;
+        }
         if (!existingDeclaration) {
           tree->addChild(usedEntity);
         }
