@@ -15,7 +15,8 @@ using namespace strd;
 
 namespace {
 bool declMatchesNameAndAt(const std::string &objectName,
-                          const std::shared_ptr<DeclarationNode> &decl) {
+                          const std::shared_ptr<DeclarationNode> &decl,
+                          bool matchAnyAtIfUnspecified = false) {
   if (!decl) {
     return false;
   }
@@ -43,7 +44,7 @@ bool declMatchesNameAndAt(const std::string &objectName,
   }
   if (decl->getName() == objectName) {
     auto atProp = decl->getCompilerProperty("_at");
-    if (!atProp) {
+    if (!atProp || matchAnyAtIfUnspecified) {
       return true;
     }
   }
@@ -366,7 +367,7 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
           scopeNode->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(scopeNode);
-        if (declMatchesNameAndAt(objectName, decl)) {
+        if (declMatchesNameAndAt(objectName, decl, true)) {
           if (ASTQuery::namespaceMatch(scopesList, decl, currentFramework)) {
             if (std::find(decls.begin(), decls.end(), decl) == decls.end()) {
               decls.push_back(decl);
@@ -395,7 +396,7 @@ std::vector<std::shared_ptr<DeclarationNode>> ASTQuery::findAllDeclarations(
           node->getNodeType() == AST::Declaration) {
         std::shared_ptr<DeclarationNode> decl =
             std::static_pointer_cast<DeclarationNode>(node);
-        if (declMatchesNameAndAt(objectName, decl)) {
+        if (declMatchesNameAndAt(objectName, decl, true)) {
           if (ASTQuery::namespaceMatch(scopesList, decl, currentFramework)) {
             if (std::find(decls.begin(), decls.end(), decl) == decls.end()) {
               decls.push_back(decl);
@@ -1811,54 +1812,63 @@ std::shared_ptr<DeclarationNode> ASTQuery::findDeclarationByName(
     baseName = baseName.substr(pos + 2);
   }
   objectName = baseName;
-  for (auto subScopeIt = scopeStack.rbegin(); subScopeIt != scopeStack.rend();
-       subScopeIt++) {
-    auto subScope = *subScopeIt;
-    for (const ASTNode &scopeNode : subScope.second) {
-      if (scopeNode->getNodeType() == AST::ArrayDeclaration ||
-          scopeNode->getNodeType() == AST::Declaration) {
-        std::shared_ptr<DeclarationNode> decl =
-            std::static_pointer_cast<DeclarationNode>(scopeNode);
-        if (declMatchesNameAndAt(objectName, decl)) {
-          if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
-            return decl;
-          }
-        }
-      }
-    }
-  }
-  if (tree) {
-    for (const ASTNode &node : tree->getChildren()) {
-      if (node->getNodeType() == AST::ArrayDeclaration ||
-          node->getNodeType() == AST::Declaration) {
-        std::shared_ptr<DeclarationNode> decl =
-            std::static_pointer_cast<DeclarationNode>(node);
-        if (declMatchesNameAndAt(objectName, decl)) {
-          if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
-            if (framework.size() > 0) {
-              auto platformNode = decl->getCompilerProperty("framework");
-              if (platformNode && platformNode->getNodeType() == AST::String) {
-                auto platformString =
-                    std::static_pointer_cast<ValueNode>(platformNode)
-                        ->getStringValue();
-                if (platformString == framework) {
-                  return decl;
-                }
-              }
-            } else {
+
+  auto searchScopesAndTree = [&](bool matchAnyAtIfUnspecified)
+      -> std::shared_ptr<DeclarationNode> {
+    for (auto subScopeIt = scopeStack.rbegin(); subScopeIt != scopeStack.rend();
+         subScopeIt++) {
+      auto subScope = *subScopeIt;
+      for (const ASTNode &scopeNode : subScope.second) {
+        if (scopeNode->getNodeType() == AST::ArrayDeclaration ||
+            scopeNode->getNodeType() == AST::Declaration) {
+          std::shared_ptr<DeclarationNode> decl =
+              std::static_pointer_cast<DeclarationNode>(scopeNode);
+          if (declMatchesNameAndAt(objectName, decl, matchAnyAtIfUnspecified)) {
+            if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
               return decl;
             }
           }
         }
       }
     }
+    if (tree) {
+      for (const ASTNode &node : tree->getChildren()) {
+        if (node->getNodeType() == AST::ArrayDeclaration ||
+            node->getNodeType() == AST::Declaration) {
+          std::shared_ptr<DeclarationNode> decl =
+              std::static_pointer_cast<DeclarationNode>(node);
+          if (declMatchesNameAndAt(objectName, decl, matchAnyAtIfUnspecified)) {
+            if (ASTQuery::namespaceMatch(scopesList, decl, framework)) {
+              if (framework.size() > 0) {
+                auto platformNode = decl->getCompilerProperty("framework");
+                if (platformNode && platformNode->getNodeType() == AST::String) {
+                  auto platformString =
+                      std::static_pointer_cast<ValueNode>(platformNode)
+                          ->getStringValue();
+                  if (platformString == framework) {
+                    return decl;
+                  }
+                }
+              } else {
+                return decl;
+              }
+            }
+          }
+        }
+      }
+    }
+    return nullptr;
+  };
+
+  auto decl = searchScopesAndTree(false);
+  if (!decl && objectName.find('@') == std::string::npos) {
+    decl = searchScopesAndTree(true);
   }
-  if (framework.size() > 0) {
+  if (!decl && framework.size() > 0) {
     // If not found try to find in root namespace
     return findDeclarationByName(objectName, scopeStack, tree, namespaces);
-  } else {
-    return nullptr;
   }
+  return decl;
 }
 
 // ---------------------------------------------------------------------------
