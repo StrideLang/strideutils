@@ -77,8 +77,7 @@ void validateShadowingInScope(ScopeStack &scope, const ASTNode &tree,
         if (shadowed) {
           LangError error;
           error.type = LangError::ShadowedSymbol;
-          error.filename = blockDecl->getFilename();
-          error.lineNumber = blockDecl->getLine();
+          blockDecl->copyLocationTo(error);
           error.errorTokens = {blockDecl->getName(), decl->getName(),
                                shadowed->getFilename(),
                                std::to_string(shadowed->getLine())};
@@ -111,8 +110,9 @@ void addDataTypeError(const ASTNode &node, const std::string &name,
                       std::vector<LangError> &errors) {
   LangError error;
   error.type = LangError::InvalidDataType;
-  error.filename = node->getFilename();
-  error.lineNumber = node->getLine();
+  if (node) {
+    node->copyLocationTo(error);
+  }
   error.errorTokens = {name, reason};
   errors.push_back(error);
 }
@@ -441,8 +441,7 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
     if (!declaration) {
       LangError error;
       error.type = LangError::UndeclaredSymbol;
-      error.lineNumber = node->getLine();
-      error.filename = node->getFilename();
+      node->copyLocationTo(error);
       //            error.errorTokens.push_back(entity->getName());
       //            error.errorTokens.push_back(entity->getNamespace());
       std::string entityName = "";
@@ -467,8 +466,7 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
     if (!declaration) {
       LangError error;
       error.type = LangError::UndeclaredSymbol;
-      error.lineNumber = node->getLine();
-      error.filename = node->getFilename();
+      node->copyLocationTo(error);
       //            error.errorTokens.push_back(arrayNode->getName());
       //            error.errorTokens.push_back(arrayNode->getNamespace());
       std::string arrayName = "";
@@ -490,8 +488,7 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
     if (!declaration) {
       LangError error;
       error.type = LangError::UndeclaredSymbol;
-      error.lineNumber = node->getLine();
-      error.filename = node->getFilename();
+      node->copyLocationTo(error);
       //            error.errorTokens.push_back(func->getName());
       //            error.errorTokens.push_back(func->getNamespace());
       std::string funcName = "";
@@ -723,9 +720,8 @@ void ASTValidation::validateTypesForDeclaration(
   if (!declaration) { // Check if node type exists
     LangError error;  // Not a valid type, then error
     error.type = LangError::UnknownType;
-    error.lineNumber = decl->getLine();
+    decl->copyLocationTo(error);
     error.errorTokens.push_back(decl->getEntityType());
-    error.filename = decl->getFilename();
     errors.push_back(error);
   } else {
     // Validate port names and types
@@ -738,12 +734,11 @@ void ASTValidation::validateTypesForDeclaration(
     if (unresolvedType && unresolvedType->getNodeType() == AST::String) {
       LangError error;
       error.type = LangError::UnresolvedType;
-      error.lineNumber = decl->getLine();
+      decl->copyLocationTo(error);
       error.errorTokens.push_back(decl->getName());
       error.errorTokens.push_back(
           std::static_pointer_cast<ValueNode>(unresolvedType)
               ->getStringValue());
-      error.filename = decl->getFilename();
       errors.push_back(error);
     }
     auto typeProperties =
@@ -766,10 +761,9 @@ void ASTValidation::validateTypesForDeclaration(
                    ->getSwitchValue()) {
             LangError error;
             error.type = LangError::ReadOnlyPort;
-            error.lineNumber = port->getLine();
+            port->copyLocationTo(error);
             error.errorTokens.push_back(blockType);
             error.errorTokens.push_back(portName);
-            error.filename = port->getFilename();
             errors.push_back(error);
           }
         }
@@ -780,10 +774,9 @@ void ASTValidation::validateTypesForDeclaration(
       if (portTypesList.size() == 0) {
         LangError error;
         error.type = LangError::InvalidPort;
-        error.lineNumber = port->getLine();
+        port->copyLocationTo(error);
         error.errorTokens.push_back(blockType);
         error.errorTokens.push_back(portName);
-        error.filename = port->getFilename();
         errors.push_back(error);
       } else {
         // Then check type passed to port is valid
@@ -830,8 +823,7 @@ void ASTValidation::validateTypesForDeclaration(
                     declaredSize) {
               LangError error;
               error.type = LangError::ArraySizeMismatch;
-              error.lineNumber = portValue->getLine();
-              error.filename = portValue->getFilename();
+              portValue->copyLocationTo(error);
               errors.push_back(error);
             }
 
@@ -1056,8 +1048,7 @@ void ASTValidation::validateConstrainedInt(
             std::static_pointer_cast<ValueNode>(maximumNode)->getIntValue();
         if (codeValue > value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1073,8 +1064,7 @@ void ASTValidation::validateConstrainedInt(
             std::static_pointer_cast<ValueNode>(minimumNode)->getIntValue();
         if (codeValue < value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1091,8 +1081,7 @@ void ASTValidation::validateConstrainedInt(
             std::static_pointer_cast<ValueNode>(exMaximumNode)->getIntValue();
         if (codeValue >= value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1109,8 +1098,7 @@ void ASTValidation::validateConstrainedInt(
             std::static_pointer_cast<ValueNode>(exMinimumNode)->getIntValue();
         if (codeValue <= value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1126,8 +1114,7 @@ void ASTValidation::validateConstrainedInt(
             std::static_pointer_cast<ValueNode>(multipleOfNode)->getIntValue();
         if (codeValue % value != 0) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1156,8 +1143,7 @@ void ASTValidation::validateConstrainedReal(
         auto value = std::static_pointer_cast<ValueNode>(maximumNode)->toReal();
         if (codeValue > value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1173,8 +1159,7 @@ void ASTValidation::validateConstrainedReal(
         auto value = std::static_pointer_cast<ValueNode>(minimumNode)->toReal();
         if (codeValue < value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1192,8 +1177,7 @@ void ASTValidation::validateConstrainedReal(
             std::static_pointer_cast<ValueNode>(exMaximumNode)->toReal();
         if (codeValue >= value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1211,8 +1195,7 @@ void ASTValidation::validateConstrainedReal(
             std::static_pointer_cast<ValueNode>(exMinimumNode)->toReal();
         if (codeValue <= value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1239,8 +1222,7 @@ void ASTValidation::validateConstrainedString(
             std::static_pointer_cast<ValueNode>(maximumNode)->getIntValue();
         if (codeValue.size() > value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1256,8 +1238,7 @@ void ASTValidation::validateConstrainedString(
             std::static_pointer_cast<ValueNode>(minimumNode)->getIntValue();
         if (codeValue.size() < value) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1291,9 +1272,8 @@ void ASTValidation::validateConstrainedList(
           << portName << "' in " << declaration->getEntityType() << std::endl;
     } else if (collSize > maxVal) {
       LangError error;
-      error.lineNumber = portValue->getLine();
-      error.filename = portValue->getFilename();
-      error.type = LangError::ConstraintFail;
+          portValue->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
       error.errorTokens.push_back(declaration->getEntityType());
       error.errorTokens.push_back(portName);
       error.errorTokens.push_back(AST::toText(constrainDecl));
@@ -1313,9 +1293,8 @@ void ASTValidation::validateConstrainedList(
           << portName << "' in " << declaration->getEntityType() << std::endl;
     } else if (collSize < minVal) {
       LangError error;
-      error.lineNumber = portValue->getLine();
-      error.filename = portValue->getFilename();
-      error.type = LangError::ConstraintFail;
+          portValue->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
       error.errorTokens.push_back(declaration->getEntityType());
       error.errorTokens.push_back(portName);
       error.errorTokens.push_back(AST::toText(constrainDecl));
@@ -1342,8 +1321,7 @@ void ASTValidation::validateConstrainedList(
 
         if (repeated) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(portName);
@@ -1368,9 +1346,8 @@ void ASTValidation::validateConstrainedList(
           if (!matchesAllowedType(node, validTypes, scopeStack, tree,
                                   parentNamespace, currentFramework)) {
             LangError error;
-            error.lineNumber = portValue->getLine();
-            error.filename = portValue->getFilename();
-            error.type = LangError::ConstraintFail;
+          portValue->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
             error.errorTokens.push_back(declaration->getEntityType());
             error.errorTokens.push_back(AST::toText(allowedNode));
             error.errorTokens.push_back(AST::toText(node));
@@ -1384,8 +1361,7 @@ void ASTValidation::validateConstrainedList(
         if (!matchesAllowedType(dummyInt, validTypes, scopeStack, tree,
                                 parentNamespace, currentFramework)) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(AST::toText(allowedNode));
@@ -1436,8 +1412,7 @@ void ASTValidation::validateConstrainedList(
         }
         if (!matched) {
           LangError error;
-          error.lineNumber = portValue->getLine();
-          error.filename = portValue->getFilename();
+          portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
           error.errorTokens.push_back(declaration->getEntityType());
           error.errorTokens.push_back(AST::toText(allowedNode));
