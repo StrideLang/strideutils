@@ -10,7 +10,7 @@
 
 namespace strd {
 
-constexpr uint32_t kSerializerVersion = 2;
+constexpr uint32_t kSerializerVersion = 3;
 
 #pragma pack(push, 1)
 struct CacheEnvelopeHeader {
