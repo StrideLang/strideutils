@@ -834,7 +834,12 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
       std::shared_ptr<DeclarationNode> entityDecl =
           ASTQuery::findDeclarationByName(propertyNode->getEntity(), scope,
                                           tree);
-      if (entityDecl) {
+      // Private properties stay member accesses, so that later passes
+      // report them instead of reading the declaration's value
+      if (entityDecl &&
+          ASTQuery::isPublicProperty(entityDecl,
+                                     propertyNode->getPropertyName(), scope,
+                                     tree)) {
         ASTNode property =
             entityDecl->getPropertyValue(propertyNode->getPropertyName());
         if (property) { // First replace if pointing to a name
@@ -1112,7 +1117,9 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
         static_cast<MemberAccessNode *>(value.get());
     std::shared_ptr<DeclarationNode> entityDecl =
         ASTQuery::findDeclarationByName(propertyNode->getEntity(), scope, tree);
-    if (entityDecl) {
+    if (entityDecl &&
+        ASTQuery::isPublicProperty(entityDecl, propertyNode->getPropertyName(),
+                                   scope, tree)) {
       ASTNode propertyValue =
           entityDecl->getPropertyValue(propertyNode->getPropertyName());
       if (propertyValue) {
@@ -1422,7 +1429,9 @@ std::string ASTFunctions::evaluateConstString(ASTNode node, ScopeStack scope,
     std::shared_ptr<DeclarationNode> entityDecl =
         ASTQuery::findDeclarationByName(propertyNode->getEntity(), scope, tree,
                                         {}, currentFramework);
-    if (entityDecl) {
+    if (entityDecl &&
+        ASTQuery::isPublicProperty(entityDecl, propertyNode->getPropertyName(),
+                                   scope, tree)) {
       ASTNode propertyValue =
           entityDecl->getPropertyValue(propertyNode->getPropertyName());
       if (propertyValue) {

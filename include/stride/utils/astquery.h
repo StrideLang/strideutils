@@ -146,6 +146,13 @@ public:
   getPortsForTypeEntity(std::shared_ptr<DeclarationNode> entityDecl,
                         ScopeStack scope, ASTNode tree);
 
+  // Whether `decl.property` may be read from outside the declaration. A
+  // typeProperty is public unless its schema sets `public: off`. Properties
+  // the schema does not declare count as public.
+  static bool isPublicProperty(std::shared_ptr<DeclarationNode> decl,
+                               const std::string &property, ScopeStack scope,
+                               ASTNode tree);
+
   static std::vector<ASTNode>
   getValidTypesForPort(std::shared_ptr<DeclarationNode> typeDeclaration,
                        std::string portName, ScopeStack scope, ASTNode tree);
