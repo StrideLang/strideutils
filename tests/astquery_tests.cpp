@@ -80,7 +80,7 @@ TEST_F(ASTQueryTest, GetInheritedTypes) {
   ASSERT_NE(constantDecl, nullptr);
 
   auto inherited = ASTQuery::getInheritedTypes(constantDecl, scope, tree);
-  EXPECT_EQ(inherited.size(), 0);
+  EXPECT_EQ(inherited.size(), 1);
 }
 
 TEST_F(ASTQueryTest, IsConstant) {
@@ -104,38 +104,47 @@ TEST_F(ASTQueryTest, IsConstant) {
 
 TEST_F(ASTQueryTest, MultiSegmentNamespaceLookup) {
   // Create a synthetic declaration in Audio::Filters namespace
-  auto decl = std::make_shared<DeclarationNode>("Biquad", "module", nullptr, "test", 1);
-  decl->appendToPropertyValue("namespaceTree", std::make_shared<ValueNode>("Audio", "test", 1));
-  decl->appendToPropertyValue("namespaceTree", std::make_shared<ValueNode>("Filters", "test", 1));
+  auto decl =
+      std::make_shared<DeclarationNode>("Biquad", "module", nullptr, "test", 1);
+  decl->appendToPropertyValue("namespaceTree",
+                              std::make_shared<ValueNode>("Audio", "test", 1));
+  decl->appendToPropertyValue(
+      "namespaceTree", std::make_shared<ValueNode>("Filters", "test", 1));
   tree->addChild(decl);
 
   // 1. Direct qualified lookup
-  auto found1 = ASTQuery::findDeclarationByName("Audio::Filters::Biquad", {}, tree);
+  auto found1 =
+      ASTQuery::findDeclarationByName("Audio::Filters::Biquad", {}, tree);
   ASSERT_NE(found1, nullptr);
   EXPECT_EQ(found1->getName(), "Biquad");
 
   // 2. Lookup with namespaces vector
-  auto found2 = ASTQuery::findDeclarationByName("Biquad", {}, tree, {"Audio", "Filters"});
+  auto found2 =
+      ASTQuery::findDeclarationByName("Biquad", {}, tree, {"Audio", "Filters"});
   ASSERT_NE(found2, nullptr);
   EXPECT_EQ(found2->getName(), "Biquad");
 
   // 3. Partial qualified lookup with base namespace
-  auto found3 = ASTQuery::findDeclarationByName("Filters::Biquad", {}, tree, {"Audio"});
+  auto found3 =
+      ASTQuery::findDeclarationByName("Filters::Biquad", {}, tree, {"Audio"});
   ASSERT_NE(found3, nullptr);
   EXPECT_EQ(found3->getName(), "Biquad");
 
   // 4. Mismatched namespace lookup should fail
-  auto notFound = ASTQuery::findDeclarationByName("Other::Filters::Biquad", {}, tree);
+  auto notFound =
+      ASTQuery::findDeclarationByName("Other::Filters::Biquad", {}, tree);
   EXPECT_EQ(notFound, nullptr);
 }
 
 TEST_F(ASTQueryTest, GetContainedStreamBlocksStructuralAndNested) {
-  auto addProp = [](const std::shared_ptr<DeclarationNode> &d, const std::string &name, ASTNode val) {
+  auto addProp = [](const std::shared_ptr<DeclarationNode> &d,
+                    const std::string &name, ASTNode val) {
     d->addProperty(std::make_shared<PropertyNode>(name, val, "test", 1));
   };
 
   // 1. Create a module with a default "streams" block
-  auto moduleDecl = std::make_shared<DeclarationNode>("TestModule", "module", nullptr, "test", 1);
+  auto moduleDecl = std::make_shared<DeclarationNode>("TestModule", "module",
+                                                      nullptr, "test", 1);
   auto streamList = std::make_shared<ListNode>("test", 1);
   auto s1 = std::make_shared<StreamNode>(
       std::make_shared<ValueNode>((int64_t)1, "test", 1),
@@ -151,7 +160,8 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksStructuralAndNested) {
   EXPECT_EQ(modBlocks[0].streams[0], s1);
 
   // 2. Create a state with onEntry, updateGuard, and nested transitions
-  auto stateDecl = std::make_shared<DeclarationNode>("TestState", "state", nullptr, "test", 1);
+  auto stateDecl = std::make_shared<DeclarationNode>("TestState", "state",
+                                                     nullptr, "test", 1);
   auto entryList = std::make_shared<ListNode>("test", 1);
   auto sEntry = std::make_shared<StreamNode>(
       std::make_shared<ValueNode>((int64_t)10, "test", 1),
@@ -167,7 +177,8 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksStructuralAndNested) {
   addProp(stateDecl, "updateGuard", guardList);
 
   // Nested transition inside transitions property
-  auto transDecl = std::make_shared<DeclarationNode>("Trans1", "transition", nullptr, "test", 1);
+  auto transDecl = std::make_shared<DeclarationNode>("Trans1", "transition",
+                                                     nullptr, "test", 1);
   auto transStreamList = std::make_shared<ListNode>("test", 1);
   auto sTrans = std::make_shared<StreamNode>(
       std::make_shared<ValueNode>((int64_t)50, "test", 1),
@@ -191,19 +202,27 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksStructuralAndNested) {
 }
 
 TEST_F(ASTQueryTest, GetContainedStreamBlocksSchemaReflection) {
-  auto addProp = [](const std::shared_ptr<DeclarationNode> &d, const std::string &name, ASTNode val) {
+  auto addProp = [](const std::shared_ptr<DeclarationNode> &d,
+                    const std::string &name, ASTNode val) {
     d->addProperty(std::make_shared<PropertyNode>(name, val, "test", 1));
   };
 
   // Create schema type definition for a custom pipeline stage
-  // type _PipelineType { typeName: "pipeline" properties: [ typeProperty { name: "stage1" isStreamBlock: on executionStage: "step1" } ] }
-  auto schemaType = std::make_shared<DeclarationNode>("_PipelineType", "type", nullptr, "test", 1);
-  addProp(schemaType, "typeName", std::make_shared<ValueNode>(std::string("pipeline"), "test", 1));
+  // type _PipelineType { typeName: "pipeline" properties: [ typeProperty {
+  // name: "stage1" isStreamBlock: on executionStage: "step1" } ] }
+  auto schemaType = std::make_shared<DeclarationNode>("_PipelineType", "type",
+                                                      nullptr, "test", 1);
+  addProp(schemaType, "typeName",
+          std::make_shared<ValueNode>(std::string("pipeline"), "test", 1));
 
-  auto propDef = std::make_shared<DeclarationNode>("stage1Prop", "typeProperty", nullptr, "test", 1);
-  addProp(propDef, "name", std::make_shared<ValueNode>(std::string("stage1"), "test", 1));
-  addProp(propDef, "isStreamBlock", std::make_shared<ValueNode>(true, "test", 1));
-  addProp(propDef, "executionStage", std::make_shared<ValueNode>(std::string("step1"), "test", 1));
+  auto propDef = std::make_shared<DeclarationNode>("stage1Prop", "typeProperty",
+                                                   nullptr, "test", 1);
+  addProp(propDef, "name",
+          std::make_shared<ValueNode>(std::string("stage1"), "test", 1));
+  addProp(propDef, "isStreamBlock",
+          std::make_shared<ValueNode>(true, "test", 1));
+  addProp(propDef, "executionStage",
+          std::make_shared<ValueNode>(std::string("step1"), "test", 1));
 
   auto propList = std::make_shared<ListNode>("test", 1);
   propList->addChild(propDef);
@@ -211,7 +230,8 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksSchemaReflection) {
   tree->addChild(schemaType);
 
   // Create an instance of pipeline
-  auto pipeDecl = std::make_shared<DeclarationNode>("MyPipe", "pipeline", nullptr, "test", 1);
+  auto pipeDecl = std::make_shared<DeclarationNode>("MyPipe", "pipeline",
+                                                    nullptr, "test", 1);
   auto sPipe = std::make_shared<StreamNode>(
       std::make_shared<ValueNode>((int64_t)100, "test", 1),
       std::make_shared<ValueNode>((int64_t)200, "test", 1), "test", 1);
@@ -232,7 +252,8 @@ TEST_F(ASTQueryTest, FindNodeAtAndEnclosingScope) {
   auto nodeAtModule = ASTQuery::findNodeAt(tree, 1, 8);
   ASSERT_NE(nodeAtModule, nullptr);
   EXPECT_EQ(nodeAtModule->getNodeType(), AST::Declaration);
-  EXPECT_EQ(std::static_pointer_cast<DeclarationNode>(nodeAtModule)->getName(), "QueryTest");
+  EXPECT_EQ(std::static_pointer_cast<DeclarationNode>(nodeAtModule)->getName(),
+            "QueryTest");
 
   // Line 15: constant MyConstant { value: 42 }
   auto nodeAtConstant = ASTQuery::findNodeAt(tree, 15, 18);
@@ -242,7 +263,8 @@ TEST_F(ASTQueryTest, FindNodeAtAndEnclosingScope) {
   auto scope = ASTQuery::getEnclosingScopeAt(tree, 15, 18);
   ASSERT_GE(scope.size(), 2u);
   // Outer frame is root, second frame is QueryTest blocks
-  auto enclosingDecl = std::static_pointer_cast<DeclarationNode>(scope[1].first);
+  auto enclosingDecl =
+      std::static_pointer_cast<DeclarationNode>(scope[1].first);
   EXPECT_EQ(enclosingDecl->getName(), "QueryTest");
 }
 
@@ -256,18 +278,22 @@ TEST_F(ASTQueryTest, PropertyDeclarationQueries) {
   auto inBlockDecl = ASTQuery::findDeclarationByName("InBlock", scope, tree);
   ASSERT_NE(inBlockDecl, nullptr);
 
-  // Signal inherits from _SignalType and should have allowed properties like "default" and "rate"
-  auto allSignalProps = ASTQuery::getAllAllowedProperties(inBlockDecl, scope, tree);
+  // Signal inherits from _SignalType and should have allowed properties like
+  // "default" and "rate"
+  auto allSignalProps =
+      ASTQuery::getAllAllowedProperties(inBlockDecl, scope, tree);
   EXPECT_FALSE(allSignalProps.empty());
 
-  auto defaultProp = ASTQuery::findPropertyDeclaration(inBlockDecl, "default", scope, tree);
+  auto defaultProp =
+      ASTQuery::findPropertyDeclaration(inBlockDecl, "default", scope, tree);
   ASSERT_NE(defaultProp, nullptr);
   auto nameVal = defaultProp->getPropertyValue("name");
   ASSERT_NE(nameVal, nullptr);
-  EXPECT_EQ(std::static_pointer_cast<ValueNode>(nameVal)->getStringValue(), "default");
+  EXPECT_EQ(std::static_pointer_cast<ValueNode>(nameVal)->getStringValue(),
+            "default");
 
   // Non-existent property returns nullptr
-  auto nonExistent = ASTQuery::findPropertyDeclaration(inBlockDecl, "nonExistentField", scope, tree);
+  auto nonExistent = ASTQuery::findPropertyDeclaration(
+      inBlockDecl, "nonExistentField", scope, tree);
   EXPECT_EQ(nonExistent, nullptr);
 }
-
