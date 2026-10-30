@@ -21,12 +21,12 @@ type _Literals {
     ]
 }
 
-literals String {
+literals ValidString {
     stringLiteral: "hello"
     constrainedString: "wo"
 }
 
-literals String {
+literals ValidString {
     stringLiteral: "hello"
     constrainedString: "12345678"
 }

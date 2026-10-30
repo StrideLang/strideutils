@@ -32,7 +32,7 @@ type _Literals {
     ]
 }
 
-literals Real {
+literals ValidReal {
     realLiteral: 4
     constrainedReal: 5
     constrainedReal2: 5

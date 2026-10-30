@@ -42,7 +42,7 @@ type _Literals {
     ]
 }
 
-literals Int {
+literals ValidInt {
     intLiteral: 4
     constrainedInt: 5
     constrainedInt2: 5
