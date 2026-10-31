@@ -141,6 +141,9 @@ protected:
       ScopeStack scopeStack = ScopeStack(), ASTNode tree = nullptr,
       std::vector<std::string> parentNamespace = {},
       std::string currentFramework = "");
+  static void
+  validateConstraintGuards(std::shared_ptr<DeclarationNode> constrainDecl,
+                           std::vector<LangError> &errors);
   static std::string getTypeName(ASTNode child,
                                  ScopeStack scopeStack = ScopeStack(),
                                  ASTNode tree = nullptr,

@@ -1,0 +1,85 @@
+type _LiteralEnumSchema {
+    typeName: "enumSchema"
+    properties: [
+        typeProperty {
+            name: "strEnum"
+            allowedTypes: ["idle", "running", "paused", "stopped"]
+            default: "idle"
+            required: off
+        },
+        typeProperty {
+            name: "intEnum"
+            allowedTypes: [1, 2, 4, 8]
+            default: 1
+            required: off
+        },
+        typeProperty {
+            name: "realEnum"
+            allowedTypes: [0.5, 1.5, 2.5]
+            default: 0.5
+            required: off
+        },
+        typeProperty {
+            name: "switchEnum"
+            allowedTypes: [off]
+            default: off
+            required: off
+        },
+        typeProperty {
+            name: "mixedEnum"
+            allowedTypes: [none, "auto", "manual"]
+            default: none
+            required: off
+        },
+        typeProperty {
+            name: "openEnum"
+            allowedTypes: [_IntLiteral, "none"]
+            default: "none"
+            required: off
+        }
+    ]
+}
+
+# Valid instances
+enumSchema Valid1 {
+    strEnum: "running"
+    intEnum: 4
+    realEnum: 1.5
+    switchEnum: off
+    mixedEnum: none
+    openEnum: 42
+}
+
+enumSchema Valid2 {
+    strEnum: "idle"
+    intEnum: 1
+    realEnum: 0.5
+    switchEnum: off
+    mixedEnum: "auto"
+    openEnum: "none"
+}
+
+# Invalid instances
+enumSchema FailString {
+    strEnum: "unknown"
+}
+
+enumSchema FailInt {
+    intEnum: 3
+}
+
+enumSchema FailReal {
+    realEnum: 1.0
+}
+
+enumSchema FailSwitch {
+    switchEnum: on
+}
+
+enumSchema FailMixed {
+    mixedEnum: "fast"
+}
+
+enumSchema FailOpen {
+    openEnum: "other"
+}

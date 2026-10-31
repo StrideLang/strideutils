@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include <unordered_set>
 
 using namespace strd;
@@ -708,6 +709,9 @@ void ASTValidation::validateTypesForDeclaration(
     std::vector<LangError> &errors, ASTNode tree, std::string currentFramework,
     std::set<const void *> *processedNodes) {
   auto blockType = decl->getEntityType();
+  if (blockType == "constrainedInt" || blockType == "constrainedReal") {
+    validateConstraintGuards(decl, errors);
+  }
 
   auto frameworkNode = decl->getCompilerProperty("framework");
   std::string frameworkName;
@@ -1034,10 +1038,216 @@ void ASTValidation::validateTypesForDeclaration(
   }
 }
 
+void ASTValidation::validateConstraintGuards(
+    std::shared_ptr<DeclarationNode> constrainDecl,
+    std::vector<LangError> &errors) {
+  if (!constrainDecl) {
+    return;
+  }
+  if (constrainDecl->getCompilerProperty("guardsValidated")) {
+    return;
+  }
+  constrainDecl->setCompilerProperty("guardsValidated",
+                                     std::make_shared<ValueNode>(true, __FILE__, __LINE__));
+
+  const std::string &entityType = constrainDecl->getEntityType();
+
+  if (entityType == "constrainedInt") {
+    // 1. multipleOf > 0
+    if (auto multNode = constrainDecl->getPropertyValue("multipleOf")) {
+      if (multNode->getNodeType() == AST::Int) {
+        int64_t val =
+            std::static_pointer_cast<ValueNode>(multNode)->getIntValue();
+        if (val <= 0) {
+          LangError error;
+          multNode->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
+          error.errorTokens.push_back(constrainDecl->getName().empty()
+                                          ? entityType
+                                          : constrainDecl->getName());
+          error.errorTokens.push_back("multipleOf");
+          error.errorTokens.push_back("multipleOf must be greater than 0");
+          error.errorTokens.push_back(std::to_string(val));
+          errors.push_back(error);
+        }
+      }
+    }
+
+    // 2. min <= max
+    auto minNode = constrainDecl->getPropertyValue("minimum");
+    auto exMinNode = constrainDecl->getPropertyValue("exclusiveMinimum");
+    auto maxNode = constrainDecl->getPropertyValue("maximum");
+    auto exMaxNode = constrainDecl->getPropertyValue("exclusiveMaximum");
+
+    bool hasMin = false;
+    int64_t minVal = 0;
+    bool isMinExclusive = false;
+    ASTNode minErrNode = nullptr;
+
+    if (minNode && minNode->getNodeType() == AST::Int) {
+      hasMin = true;
+      minVal = std::static_pointer_cast<ValueNode>(minNode)->getIntValue();
+      isMinExclusive = false;
+      minErrNode = minNode;
+    }
+    if (exMinNode && exMinNode->getNodeType() == AST::Int) {
+      int64_t exVal =
+          std::static_pointer_cast<ValueNode>(exMinNode)->getIntValue();
+      if (!hasMin || exVal > minVal) {
+        hasMin = true;
+        minVal = exVal;
+        isMinExclusive = true;
+        minErrNode = exMinNode;
+      }
+    }
+
+    bool hasMax = false;
+    int64_t maxVal = 0;
+    bool isMaxExclusive = false;
+    ASTNode maxErrNode = nullptr;
+
+    if (maxNode && maxNode->getNodeType() == AST::Int) {
+      hasMax = true;
+      maxVal = std::static_pointer_cast<ValueNode>(maxNode)->getIntValue();
+      isMaxExclusive = false;
+      maxErrNode = maxNode;
+    }
+    if (exMaxNode && exMaxNode->getNodeType() == AST::Int) {
+      int64_t exVal =
+          std::static_pointer_cast<ValueNode>(exMaxNode)->getIntValue();
+      if (!hasMax || exVal < maxVal) {
+        hasMax = true;
+        maxVal = exVal;
+        isMaxExclusive = true;
+        maxErrNode = exMaxNode;
+      }
+    }
+
+    if (hasMin && hasMax) {
+      bool invalid = false;
+      if (!isMinExclusive && !isMaxExclusive) {
+        invalid = (minVal > maxVal);
+      } else {
+        invalid = (minVal >= maxVal);
+      }
+      if (invalid) {
+        LangError error;
+        (maxErrNode ? maxErrNode : minErrNode)->copyLocationTo(error);
+        error.type = LangError::ConstraintFail;
+        error.errorTokens.push_back(constrainDecl->getName().empty()
+                                        ? entityType
+                                        : constrainDecl->getName());
+        error.errorTokens.push_back("minimum/maximum");
+        error.errorTokens.push_back(
+            "minimum must be less than or equal to maximum");
+        error.errorTokens.push_back(std::to_string(minVal) + " > " +
+                                    std::to_string(maxVal));
+        errors.push_back(error);
+      }
+    }
+  } else if (entityType == "constrainedReal") {
+    // 1. multipleOf > 0
+    if (auto multNode = constrainDecl->getPropertyValue("multipleOf")) {
+      if (multNode->getNodeType() == AST::Int ||
+          multNode->getNodeType() == AST::Real) {
+        double val = std::static_pointer_cast<ValueNode>(multNode)->toReal();
+        if (val <= 0.0) {
+          LangError error;
+          multNode->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
+          error.errorTokens.push_back(constrainDecl->getName().empty()
+                                          ? entityType
+                                          : constrainDecl->getName());
+          error.errorTokens.push_back("multipleOf");
+          error.errorTokens.push_back("multipleOf must be greater than 0");
+          error.errorTokens.push_back(std::to_string(val));
+          errors.push_back(error);
+        }
+      }
+    }
+
+    // 2. min <= max
+    auto minNode = constrainDecl->getPropertyValue("minimum");
+    auto exMinNode = constrainDecl->getPropertyValue("exclusiveMinimum");
+    auto maxNode = constrainDecl->getPropertyValue("maximum");
+    auto exMaxNode = constrainDecl->getPropertyValue("exclusiveMaximum");
+
+    bool hasMin = false;
+    double minVal = 0.0;
+    bool isMinExclusive = false;
+    ASTNode minErrNode = nullptr;
+
+    if (minNode && (minNode->getNodeType() == AST::Int ||
+                    minNode->getNodeType() == AST::Real)) {
+      hasMin = true;
+      minVal = std::static_pointer_cast<ValueNode>(minNode)->toReal();
+      isMinExclusive = false;
+      minErrNode = minNode;
+    }
+    if (exMinNode && (exMinNode->getNodeType() == AST::Int ||
+                      exMinNode->getNodeType() == AST::Real)) {
+      double exVal = std::static_pointer_cast<ValueNode>(exMinNode)->toReal();
+      if (!hasMin || exVal > minVal) {
+        hasMin = true;
+        minVal = exVal;
+        isMinExclusive = true;
+        minErrNode = exMinNode;
+      }
+    }
+
+    bool hasMax = false;
+    double maxVal = 0.0;
+    bool isMaxExclusive = false;
+    ASTNode maxErrNode = nullptr;
+
+    if (maxNode && (maxNode->getNodeType() == AST::Int ||
+                    maxNode->getNodeType() == AST::Real)) {
+      hasMax = true;
+      maxVal = std::static_pointer_cast<ValueNode>(maxNode)->toReal();
+      isMaxExclusive = false;
+      maxErrNode = maxNode;
+    }
+    if (exMaxNode && (exMaxNode->getNodeType() == AST::Int ||
+                      exMaxNode->getNodeType() == AST::Real)) {
+      double exVal = std::static_pointer_cast<ValueNode>(exMaxNode)->toReal();
+      if (!hasMax || exVal < maxVal) {
+        hasMax = true;
+        maxVal = exVal;
+        isMaxExclusive = true;
+        maxErrNode = exMaxNode;
+      }
+    }
+
+    if (hasMin && hasMax) {
+      bool invalid = false;
+      if (!isMinExclusive && !isMaxExclusive) {
+        invalid = (minVal > maxVal);
+      } else {
+        invalid = (minVal >= maxVal);
+      }
+      if (invalid) {
+        LangError error;
+        (maxErrNode ? maxErrNode : minErrNode)->copyLocationTo(error);
+        error.type = LangError::ConstraintFail;
+        error.errorTokens.push_back(constrainDecl->getName().empty()
+                                        ? entityType
+                                        : constrainDecl->getName());
+        error.errorTokens.push_back("minimum/maximum");
+        error.errorTokens.push_back(
+            "minimum must be less than or equal to maximum");
+        error.errorTokens.push_back(std::to_string(minVal) + " > " +
+                                    std::to_string(maxVal));
+        errors.push_back(error);
+      }
+    }
+  }
+}
+
 void ASTValidation::validateConstrainedInt(
     std::shared_ptr<DeclarationNode> constrainDecl,
     std::shared_ptr<DeclarationNode> declaration, std::string portName,
     ASTNode portValue, std::vector<LangError> &errors) {
+  validateConstraintGuards(constrainDecl, errors);
 
   if (portValue->getNodeType() == AST::Int) {
     auto codeValue =
@@ -1112,7 +1322,38 @@ void ASTValidation::validateConstrainedInt(
       if (multipleOfNode->getNodeType() == AST::Int) {
         auto value =
             std::static_pointer_cast<ValueNode>(multipleOfNode)->getIntValue();
-        if (codeValue % value != 0) {
+        if (value > 0 && codeValue % value != 0) {
+          LangError error;
+          portValue->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
+          error.errorTokens.push_back(declaration->getEntityType());
+          error.errorTokens.push_back(portName);
+          error.errorTokens.push_back(AST::toText(constrainDecl));
+          error.errorTokens.push_back(AST::toText(portValue));
+          errors.push_back(error);
+        }
+      }
+    }
+    auto allowedValuesNode = constrainDecl->getPropertyValue("allowedValues");
+    if (!allowedValuesNode || allowedValuesNode->getNodeType() == AST::None ||
+        (allowedValuesNode->getNodeType() == AST::List &&
+         allowedValuesNode->getChildren().empty())) {
+      allowedValuesNode = constrainDecl->getPropertyValue("enum");
+    }
+    if (allowedValuesNode && allowedValuesNode->getNodeType() == AST::List) {
+      const auto &children = allowedValuesNode->getChildren();
+      if (!children.empty()) {
+        bool match = false;
+        for (const auto &item : children) {
+          if (item->getNodeType() == AST::Int) {
+            if (std::static_pointer_cast<ValueNode>(item)->getIntValue() ==
+                codeValue) {
+              match = true;
+              break;
+            }
+          }
+        }
+        if (!match) {
           LangError error;
           portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
@@ -1133,6 +1374,7 @@ void ASTValidation::validateConstrainedReal(
     std::shared_ptr<DeclarationNode> constrainDecl,
     std::shared_ptr<DeclarationNode> declaration, std::string portName,
     ASTNode portValue, std::vector<LangError> &errors) {
+  validateConstraintGuards(constrainDecl, errors);
 
   if (portValue->getNodeType() == AST::Int ||
       portValue->getNodeType() == AST::Real) {
@@ -1194,6 +1436,59 @@ void ASTValidation::validateConstrainedReal(
         auto value =
             std::static_pointer_cast<ValueNode>(exMinimumNode)->toReal();
         if (codeValue <= value) {
+          LangError error;
+          portValue->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
+          error.errorTokens.push_back(declaration->getEntityType());
+          error.errorTokens.push_back(portName);
+          error.errorTokens.push_back(AST::toText(constrainDecl));
+          error.errorTokens.push_back(AST::toText(portValue));
+          errors.push_back(error);
+        }
+      }
+    }
+    if (auto multipleOfNode = constrainDecl->getPropertyValue("multipleOf")) {
+      if (multipleOfNode->getNodeType() == AST::Int ||
+          multipleOfNode->getNodeType() == AST::Real) {
+        auto value =
+            std::static_pointer_cast<ValueNode>(multipleOfNode)->toReal();
+        if (value > 0.0) {
+          double quotient = codeValue / value;
+          double diff = std::abs(quotient - std::round(quotient));
+          if (diff > 1e-6) {
+            LangError error;
+            portValue->copyLocationTo(error);
+            error.type = LangError::ConstraintFail;
+            error.errorTokens.push_back(declaration->getEntityType());
+            error.errorTokens.push_back(portName);
+            error.errorTokens.push_back(AST::toText(constrainDecl));
+            error.errorTokens.push_back(AST::toText(portValue));
+            errors.push_back(error);
+          }
+        }
+      }
+    }
+    auto allowedValuesNode = constrainDecl->getPropertyValue("allowedValues");
+    if (!allowedValuesNode || allowedValuesNode->getNodeType() == AST::None ||
+        (allowedValuesNode->getNodeType() == AST::List &&
+         allowedValuesNode->getChildren().empty())) {
+      allowedValuesNode = constrainDecl->getPropertyValue("enum");
+    }
+    if (allowedValuesNode && allowedValuesNode->getNodeType() == AST::List) {
+      const auto &children = allowedValuesNode->getChildren();
+      if (!children.empty()) {
+        bool match = false;
+        for (const auto &item : children) {
+          if (item->getNodeType() == AST::Int ||
+              item->getNodeType() == AST::Real) {
+            double val = std::static_pointer_cast<ValueNode>(item)->toReal();
+            if (std::abs(codeValue - val) < 1e-6) {
+              match = true;
+              break;
+            }
+          }
+        }
+        if (!match) {
           LangError error;
           portValue->copyLocationTo(error);
           error.type = LangError::ConstraintFail;
@@ -1563,7 +1858,62 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
     if (validType->getNodeType() == AST::String) {
       std::string typeCode =
           static_cast<ValueNode *>(validType.get())->getStringValue();
-      validTypeNames.push_back(typeCode);
+      if (!typeCode.empty() && typeCode[0] == '_') {
+        validTypeNames.push_back(typeCode);
+      } else if (DataTypes::isDataTypeName(typeCode)) {
+        validTypeNames.push_back(typeCode);
+      } else if (typeCode == "none") {
+        validTypeNames.push_back("none");
+      } else if (ASTQuery::findTypeDeclarationByName(typeCode, scopeStack, tree,
+                                                     parentNamespace,
+                                                     currentFramework)) {
+        validTypeNames.push_back(typeCode);
+      } else if (auto typeClass =
+                     ASTQuery::findTypeClass(typeCode, tree, currentFramework)) {
+        if (auto typesNode = typeClass->getPropertyValue("types")) {
+          for (const auto &member : typesNode->getChildren()) {
+            validTypeNames.push_back(ASTQuery::getNodeName(member));
+          }
+        }
+      } else {
+        validTypeNames.push_back("\"" + typeCode + "\"");
+      }
+    } else if (validType->getNodeType() == AST::Int) {
+      auto valNode = std::static_pointer_cast<ValueNode>(validType);
+      validTypeNames.push_back(std::to_string(valNode->getIntValue()));
+    } else if (validType->getNodeType() == AST::Real) {
+      auto valNode = std::static_pointer_cast<ValueNode>(validType);
+      std::ostringstream ss;
+      ss << valNode->toReal();
+      validTypeNames.push_back(ss.str());
+    } else if (validType->getNodeType() == AST::Switch) {
+      auto valNode = std::static_pointer_cast<ValueNode>(validType);
+      validTypeNames.push_back(valNode->getSwitchValue() ? "on" : "off");
+    } else if (validType->getNodeType() == AST::None) {
+      validTypeNames.push_back("none");
+    } else if (validType->getNodeType() == AST::Expression) {
+      auto resolved = ASTFunctions::resolveConstant(
+          validType, scopeStack, tree, currentFramework);
+      if (resolved) {
+        if (resolved->getNodeType() == AST::Int) {
+          validTypeNames.push_back(std::to_string(
+              std::static_pointer_cast<ValueNode>(resolved)->getIntValue()));
+        } else if (resolved->getNodeType() == AST::Real) {
+          std::ostringstream ss;
+          ss << std::static_pointer_cast<ValueNode>(resolved)->toReal();
+          validTypeNames.push_back(ss.str());
+        } else if (resolved->getNodeType() == AST::String) {
+          validTypeNames.push_back(
+              "\"" +
+              std::static_pointer_cast<ValueNode>(resolved)->getStringValue() +
+              "\"");
+        } else if (resolved->getNodeType() == AST::Switch) {
+          validTypeNames.push_back(
+              std::static_pointer_cast<ValueNode>(resolved)->getSwitchValue()
+                  ? "on"
+                  : "off");
+        }
+      }
     } else if (validType->getNodeType() == AST::Entity) {
       auto blockNode = std::static_pointer_cast<EntityNode>(validType);
       if (blockNode->getName() == "_Any") {
@@ -1576,6 +1926,8 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
         validTypeNames.push_back("_GeneratorRange");
       } else if (blockNode->getName() == "_Block") {
         validTypeNames.push_back("_Block");
+      } else if (blockNode->getName() == "none") {
+        validTypeNames.push_back("none");
       } else if (auto typeClass = ASTQuery::findTypeClass(
                      blockNode->getName(), tree, currentFramework)) {
         // A type class allows any of its members
@@ -1852,42 +2204,87 @@ bool ASTValidation::matchesAllowedType(
   }
 
   // 2. Literals and built-in AST types
-  if (element->getNodeType() == AST::Expression) {
-    auto resolved = ASTFunctions::resolveConstant(element, scopeStack, tree, currentFramework);
+  ASTNode evalElement = element;
+  if (evalElement->getNodeType() == AST::Expression) {
+    auto resolved = ASTFunctions::resolveConstant(evalElement, scopeStack, tree,
+                                                  currentFramework);
     if (resolved) {
-      if (resolved->getNodeType() == AST::Int) {
-        return std::find(validTypes.begin(), validTypes.end(), "_IntLiteral") != validTypes.end();
-      }
-      if (resolved->getNodeType() == AST::Real) {
-        return std::find(validTypes.begin(), validTypes.end(), "_RealLiteral") != validTypes.end();
-      }
-      if (resolved->getNodeType() == AST::String) {
-        return std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") != validTypes.end();
-      }
-      if (resolved->getNodeType() == AST::Switch) {
-        return std::find(validTypes.begin(), validTypes.end(), "_SwitchLiteral") != validTypes.end();
-      }
+      evalElement = resolved;
     }
   }
-  if (element->getNodeType() == AST::String) {
-    return std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") !=
+
+  if (evalElement->getNodeType() == AST::String) {
+    if (std::find(validTypes.begin(), validTypes.end(), "_StringLiteral") !=
+        validTypes.end()) {
+      return true;
+    }
+    std::string val =
+        std::static_pointer_cast<ValueNode>(evalElement)->getStringValue();
+    std::string quoted = "\"" + val + "\"";
+    return std::find(validTypes.begin(), validTypes.end(), quoted) !=
+               validTypes.end() ||
+           std::find(validTypes.begin(), validTypes.end(), val) !=
+               validTypes.end();
+  }
+  if (evalElement->getNodeType() == AST::Int) {
+    if (std::find(validTypes.begin(), validTypes.end(), "_IntLiteral") !=
+        validTypes.end()) {
+      return true;
+    }
+    int64_t val =
+        std::static_pointer_cast<ValueNode>(evalElement)->getIntValue();
+    std::string valStr = std::to_string(val);
+    if (std::find(validTypes.begin(), validTypes.end(), valStr) !=
+        validTypes.end()) {
+      return true;
+    }
+    for (const auto &vt : validTypes) {
+      try {
+        size_t idx = 0;
+        double d = std::stod(vt, &idx);
+        if (idx == vt.size() &&
+            std::abs(d - static_cast<double>(val)) < 1e-6) {
+          return true;
+        }
+      } catch (...) {
+      }
+    }
+    return false;
+  }
+  if (evalElement->getNodeType() == AST::Real) {
+    if (std::find(validTypes.begin(), validTypes.end(), "_RealLiteral") !=
+        validTypes.end()) {
+      return true;
+    }
+    double val = std::static_pointer_cast<ValueNode>(evalElement)->toReal();
+    for (const auto &vt : validTypes) {
+      try {
+        size_t idx = 0;
+        double d = std::stod(vt, &idx);
+        if (idx == vt.size() && std::abs(d - val) < 1e-6) {
+          return true;
+        }
+      } catch (...) {
+      }
+    }
+    return false;
+  }
+  if (evalElement->getNodeType() == AST::Switch) {
+    if (std::find(validTypes.begin(), validTypes.end(), "_SwitchLiteral") !=
+        validTypes.end()) {
+      return true;
+    }
+    bool val =
+        std::static_pointer_cast<ValueNode>(evalElement)->getSwitchValue();
+    std::string str = val ? "on" : "off";
+    return std::find(validTypes.begin(), validTypes.end(), str) !=
            validTypes.end();
   }
-  if (element->getNodeType() == AST::Int) {
-    return std::find(validTypes.begin(), validTypes.end(), "_IntLiteral") !=
-           validTypes.end();
-  }
-  if (element->getNodeType() == AST::Real) {
-    return std::find(validTypes.begin(), validTypes.end(), "_RealLiteral") !=
-           validTypes.end();
-  }
-  if (element->getNodeType() == AST::Switch) {
-    return std::find(validTypes.begin(), validTypes.end(), "_SwitchLiteral") !=
-           validTypes.end();
-  }
-  if (element->getNodeType() == AST::None) {
+  if (evalElement->getNodeType() == AST::None) {
     return std::find(validTypes.begin(), validTypes.end(), "_NoneLiteral") !=
-           validTypes.end();
+               validTypes.end() ||
+           std::find(validTypes.begin(), validTypes.end(), "none") !=
+               validTypes.end();
   }
   if (element->getNodeType() == AST::Stream) {
     return std::find(validTypes.begin(), validTypes.end(), "_StreamType") !=

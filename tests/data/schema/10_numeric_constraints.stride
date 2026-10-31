@@ -1,0 +1,140 @@
+type _NumericSchema {
+    typeName: "numericSchema"
+    properties: [
+        typeProperty {
+            name: "realMult"
+            allowedTypes: [
+                constrainedReal {
+                    multipleOf: 0.25
+                }
+            ]
+            default: none
+            required: off
+        },
+        typeProperty {
+            name: "intAllowed"
+            allowedTypes: [
+                constrainedInt {
+                    allowedValues: [1, 2, 4, 8]
+                }
+            ]
+            default: none
+            required: off
+        },
+        typeProperty {
+            name: "intEnum"
+            allowedTypes: [
+                constrainedInt {
+                    enum: [10, 20, 30]
+                }
+            ]
+            default: none
+            required: off
+        },
+        typeProperty {
+            name: "realAllowed"
+            allowedTypes: [
+                constrainedReal {
+                    allowedValues: [0.5, 1.5, 2.5]
+                }
+            ]
+            default: none
+            required: off
+        },
+        typeProperty {
+            name: "realEnum"
+            allowedTypes: [
+                constrainedReal {
+                    enum: [0.1, 0.2, 0.3]
+                }
+            ]
+            default: none
+            required: off
+        }
+    ]
+}
+
+# Valid instances
+numericSchema Valid1 {
+    realMult: 0.5
+    intAllowed: 2
+    intEnum: 20
+    realAllowed: 1.5
+    realEnum: 0.2
+}
+
+numericSchema Valid2 {
+    realMult: 1.25
+    intAllowed: 8
+    intEnum: 10
+    realAllowed: 2.5
+    realEnum: 0.1
+}
+
+# Value failures
+numericSchema FailValues {
+    realMult: 0.6
+    intAllowed: 3
+    intEnum: 25
+    realAllowed: 2.0
+    realEnum: 0.4
+}
+
+# Guard failure types
+type _InvalidGuard1 {
+    typeName: "invalidGuard1"
+    properties: [
+        typeProperty {
+            name: "badMult"
+            allowedTypes: [
+                constrainedInt {
+                    multipleOf: 0
+                }
+            ]
+        }
+    ]
+}
+
+type _InvalidGuard2 {
+    typeName: "invalidGuard2"
+    properties: [
+        typeProperty {
+            name: "badMinMax"
+            allowedTypes: [
+                constrainedInt {
+                    minimum: 10
+                    maximum: 5
+                }
+            ]
+        }
+    ]
+}
+
+type _InvalidGuard3 {
+    typeName: "invalidGuard3"
+    properties: [
+        typeProperty {
+            name: "badRealMult"
+            allowedTypes: [
+                constrainedReal {
+                    multipleOf: -0.5
+                }
+            ]
+        }
+    ]
+}
+
+type _InvalidGuard4 {
+    typeName: "invalidGuard4"
+    properties: [
+        typeProperty {
+            name: "badRealMinMax"
+            allowedTypes: [
+                constrainedReal {
+                    exclusiveMinimum: 5.0
+                    exclusiveMaximum: 5.0
+                }
+            ]
+        }
+    ]
+}

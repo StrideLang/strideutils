@@ -228,4 +228,48 @@ TEST(Schema, GeneratorListValidation) {
   EXPECT_EQ(errors[1].type, LangError::ArraySizeMismatch);
   EXPECT_EQ(errors[1].lineNumber, 33);
 }
+TEST(Schema, NumericConstraintsAndGuards) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/10_numeric_constraints.stride");
+  EXPECT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
 
+  EXPECT_EQ(errors.size(), 9);
+  for (const auto &err : errors) {
+    EXPECT_EQ(err.type, LangError::ConstraintFail);
+  }
+  // Line checks for value constraint failures:
+  EXPECT_EQ(errors[0].lineNumber, 76); // realMult: 0.6
+  EXPECT_EQ(errors[1].lineNumber, 77); // intAllowed: 3
+  EXPECT_EQ(errors[2].lineNumber, 78); // intEnum: 25
+  EXPECT_EQ(errors[3].lineNumber, 79); // realAllowed: 2.0
+  EXPECT_EQ(errors[4].lineNumber, 80); // realEnum: 0.4
+  // Line checks for validator guard failures:
+  EXPECT_EQ(errors[5].lineNumber, 91);  // multipleOf: 0
+  EXPECT_EQ(errors[6].lineNumber, 106); // maximum: 5 (< 10)
+  EXPECT_EQ(errors[7].lineNumber, 120); // multipleOf: -0.5
+  EXPECT_EQ(errors[8].lineNumber, 135); // exclusiveMaximum: 5.0 (<= 5.0)
+}
+TEST(Schema, LiteralEnumsInAllowedTypes) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/11_literal_enums.stride");
+  EXPECT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 6);
+  for (const auto &err : errors) {
+    EXPECT_EQ(err.type, LangError::InvalidPortType);
+  }
+  EXPECT_EQ(errors[0].lineNumber, 64); // strEnum: "unknown"
+  EXPECT_EQ(errors[1].lineNumber, 68); // intEnum: 3
+  EXPECT_EQ(errors[2].lineNumber, 72); // realEnum: 1.0
+  EXPECT_EQ(errors[3].lineNumber, 76); // switchEnum: on
+  EXPECT_EQ(errors[4].lineNumber, 80); // mixedEnum: "fast"
+  EXPECT_EQ(errors[5].lineNumber, 84); // openEnum: "other"
+}

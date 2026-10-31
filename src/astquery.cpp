@@ -1125,6 +1125,29 @@ ASTQuery::getDataTypeClassNames(std::shared_ptr<DeclarationNode> decl,
       if (name != "_NoneLiteral") {
         names.push_back(name);
       }
+    } else if (allowedType->getNodeType() == AST::Declaration) {
+      auto constrainDecl =
+          std::static_pointer_cast<DeclarationNode>(allowedType);
+      if (constrainDecl->getEntityType() == "constrainedEntity" ||
+          constrainDecl->getEntityType() == "constrainedList") {
+        auto allowedNode = constrainDecl->getPropertyValue("allowed");
+        if (allowedNode) {
+          std::vector<ASTNode> allowedList;
+          if (allowedNode->getNodeType() == AST::List) {
+            allowedList = allowedNode->getChildren();
+          } else {
+            allowedList.push_back(allowedNode);
+          }
+          for (const auto &elem : allowedList) {
+            if (elem->getNodeType() == AST::Entity) {
+              auto name = ASTQuery::getNodeName(elem);
+              if (name != "_NoneLiteral") {
+                names.push_back(name);
+              }
+            }
+          }
+        }
+      }
     }
   }
   return names;
