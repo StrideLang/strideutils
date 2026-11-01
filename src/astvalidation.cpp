@@ -423,7 +423,100 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
 
     return; // Children have been processed with corect scopes.
   } else if (node->getNodeType() == AST::Stream) {
-    // Stream members will be processed with children below
+    // Check stream write targets: only allow writes when writeable is on
+    auto checkWriteTarget = [&](ASTNode dest) {
+      if (!dest) {
+        return;
+      }
+      if (dest->getNodeType() == AST::MemberAccess) {
+        auto memberAccess = std::static_pointer_cast<MemberAccessNode>(dest);
+        std::string entityName = memberAccess->getEntity();
+        std::string propName = memberAccess->getPropertyName();
+        if (!entityName.empty() && !propName.empty()) {
+          std::vector<std::string> namespaces =
+              memberAccess->getNamespaceList();
+          namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                            parentNamespace.end());
+          auto entityDecl = ASTQuery::findDeclarationByName(
+              entityName, scopeStack, tree, namespaces, currentFramework);
+          if (entityDecl) {
+            if (!ASTQuery::isWriteableProperty(entityDecl, propName, scopeStack,
+                                               tree)) {
+              LangError error;
+              error.type = LangError::ReadOnlyPort;
+              dest->copyLocationTo(error);
+              error.errorTokens.push_back(entityDecl->getEntityType());
+              error.errorTokens.push_back(propName);
+              errors.push_back(error);
+            }
+          }
+        }
+      } else if (dest->getNodeType() == AST::List) {
+        for (const auto &elem : dest->getChildren()) {
+          if (elem && elem->getNodeType() == AST::MemberAccess) {
+            auto memberAccess =
+                std::static_pointer_cast<MemberAccessNode>(elem);
+            std::string entityName = memberAccess->getEntity();
+            std::string propName = memberAccess->getPropertyName();
+            if (!entityName.empty() && !propName.empty()) {
+              std::vector<std::string> namespaces =
+                  memberAccess->getNamespaceList();
+              namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                                parentNamespace.end());
+              auto entityDecl = ASTQuery::findDeclarationByName(
+                  entityName, scopeStack, tree, namespaces, currentFramework);
+              if (entityDecl) {
+                if (!ASTQuery::isWriteableProperty(entityDecl, propName,
+                                                   scopeStack, tree)) {
+                  LangError error;
+                  error.type = LangError::ReadOnlyPort;
+                  elem->copyLocationTo(error);
+                  error.errorTokens.push_back(entityDecl->getEntityType());
+                  error.errorTokens.push_back(propName);
+                  errors.push_back(error);
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    ASTNode cur = node;
+    while (cur && cur->getNodeType() == AST::Stream) {
+      auto streamNode = std::static_pointer_cast<StreamNode>(cur);
+      auto right = streamNode->getRight();
+      if (right) {
+        if (right->getNodeType() == AST::Stream) {
+          checkWriteTarget(
+              std::static_pointer_cast<StreamNode>(right)->getLeft());
+        } else {
+          checkWriteTarget(right);
+        }
+      }
+      cur = right;
+    }
+  } else if (node->getNodeType() == AST::MemberAccess) {
+    auto memberAccess = std::static_pointer_cast<MemberAccessNode>(node);
+    std::string entityName = memberAccess->getEntity();
+    std::string propName = memberAccess->getPropertyName();
+    if (!entityName.empty() && !propName.empty()) {
+      std::vector<std::string> namespaces = memberAccess->getNamespaceList();
+      namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                        parentNamespace.end());
+      auto entityDecl = ASTQuery::findDeclarationByName(
+          entityName, scopeStack, tree, namespaces, currentFramework);
+      if (entityDecl) {
+        if (!ASTQuery::isPublicProperty(entityDecl, propName, scopeStack, tree)) {
+          LangError error;
+          error.type = LangError::PrivatePort;
+          node->copyLocationTo(error);
+          error.errorTokens.push_back(entityDecl->getEntityType());
+          error.errorTokens.push_back(propName);
+          errors.push_back(error);
+        }
+      }
+    }
   } else if (node->getNodeType() == AST::List) {
     // Children are checked automatically below
   } else if (node->getNodeType() == AST::Entity) {

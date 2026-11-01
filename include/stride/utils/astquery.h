@@ -153,6 +153,12 @@ public:
                                const std::string &property, ScopeStack scope,
                                ASTNode tree);
 
+  // Whether `decl.property` may be written. A typeProperty is writeable unless
+  // its schema sets `writeable: off`.
+  static bool isWriteableProperty(std::shared_ptr<DeclarationNode> decl,
+                                  const std::string &property, ScopeStack scope,
+                                  ASTNode tree);
+
   static std::vector<ASTNode>
   getValidTypesForPort(std::shared_ptr<DeclarationNode> typeDeclaration,
                        std::string portName, ScopeStack scope, ASTNode tree);

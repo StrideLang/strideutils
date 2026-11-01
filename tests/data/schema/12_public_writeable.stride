@@ -1,0 +1,106 @@
+type _TestEntity {
+    typeName: "testEntity"
+    properties: [
+        typeProperty {
+            name: "publicReadWrite"
+            allowedTypes: _IntLiteral
+            default: 0
+            required: off
+            public: on
+            writeable: on
+        },
+        typeProperty {
+            name: "publicReadOnly"
+            allowedTypes: _IntLiteral
+            default: 10
+            required: off
+            public: on
+            writeable: off
+        },
+        typeProperty {
+            name: "privateConfig"
+            allowedTypes: _IntLiteral
+            default: 20
+            required: off
+            public: off
+            writeable: on
+        },
+        typeProperty {
+            name: "privateReadOnly"
+            allowedTypes: _IntLiteral
+            default: 30
+            required: off
+            public: off
+            writeable: off
+        }
+    ]
+}
+
+signal S1 { default: 1 }
+signal S2 { default: 2 }
+signal SList[2] { default: [0, 0] }
+
+module TestModule {
+    ports: [
+        propertyInputPort ValPort { name: "val" block: Val }
+        propertyInputPort ItemsPort { name: "items" block: Items }
+    ]
+    blocks: [
+        signal Val { type: Int }
+        signal Items[2] { type: Int }
+    ]
+}
+
+# Valid: declaration sets writeable: on properties
+testEntity ValidInst {
+    publicReadWrite: 5
+    privateConfig: 25
+}
+
+# Valid: member access read of public properties directly in streams
+ValidInst.publicReadWrite >> S1;
+ValidInst.publicReadOnly >> S2;
+
+# Valid: member access in expressions
+ValidInst.publicReadWrite + 10 >> S1;
+ValidInst.publicReadOnly * 2 >> S2;
+
+# Valid: member access in lists
+[ValidInst.publicReadWrite, 10] >> SList;
+
+# Valid: member access as property values in function calls
+TestModule(val: ValidInst.publicReadWrite);
+TestModule(val: ValidInst.publicReadOnly);
+TestModule(val: ValidInst.publicReadWrite + 5);
+TestModule(items: [ValidInst.publicReadWrite, 10]);
+
+# Error 1: declaration write to writeable: off property (ReadOnlyPort)
+testEntity FailDeclReadOnly {
+    publicReadOnly: 99
+}
+
+# Error 2: declaration write to writeable: off property (ReadOnlyPort)
+testEntity FailDeclPrivateReadOnly {
+    privateReadOnly: 77
+}
+
+# Error 3: member access read of private property directly in stream (PrivatePort)
+ValidInst.privateConfig >> S1;
+
+# Error 4: member access read of private property directly in stream (PrivatePort)
+ValidInst.privateReadOnly >> S1;
+
+# Error 5: member access in expression with private property (PrivatePort)
+ValidInst.privateConfig + 10 >> S1;
+
+# Error 6: member access in list with private property (PrivatePort)
+[ValidInst.privateConfig, 10] >> SList;
+
+# Error 7: member access as property value in function call with private property (PrivatePort)
+TestModule(val: ValidInst.privateConfig);
+
+# Error 8: member access in expression within function call with private property (PrivatePort)
+TestModule(val: ValidInst.privateConfig + 5);
+
+# Error 9: member access in list within function call with private property (PrivatePort)
+TestModule(items: [ValidInst.privateConfig, 10]);

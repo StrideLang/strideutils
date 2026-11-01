@@ -1018,6 +1018,31 @@ bool ASTQuery::isPublicProperty(std::shared_ptr<DeclarationNode> decl,
   return true;
 }
 
+bool ASTQuery::isWriteableProperty(std::shared_ptr<DeclarationNode> decl,
+                                   const std::string &property, ScopeStack scope,
+                                   ASTNode tree) {
+  if (!decl) {
+    return true;
+  }
+  for (const auto &port :
+       ASTQuery::getPortsForType(decl->getEntityType(), scope, tree)) {
+    if (!port || port->getNodeType() != AST::Declaration) {
+      continue;
+    }
+    auto portDecl = std::static_pointer_cast<DeclarationNode>(port);
+    auto nameNode = portDecl->getPropertyValue("name");
+    if (!nameNode || nameNode->getNodeType() != AST::String ||
+        std::static_pointer_cast<ValueNode>(nameNode)->getStringValue() !=
+            property) {
+      continue;
+    }
+    auto writeableNode = portDecl->getPropertyValue("writeable");
+    return !writeableNode || writeableNode->getNodeType() != AST::Switch ||
+           std::static_pointer_cast<ValueNode>(writeableNode)->getSwitchValue();
+  }
+  return true;
+}
+
 std::vector<ASTNode>
 ASTQuery::getPortsForTypeEntity(std::shared_ptr<DeclarationNode> entityDecl,
                                 ScopeStack scope, ASTNode tree) {

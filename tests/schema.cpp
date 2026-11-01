@@ -193,7 +193,8 @@ TEST(Schema, BlockValidation) {
 TEST(Schema, ArrayDefaultValidation) {
   auto strideroot = ASTFunctions::getDefaultStrideRoot();
   ASTNode tree;
-  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/08_array_default_validation.stride");
+  tree = AST::parseFile(TESTS_SOURCE_DIR
+                        "schema/08_array_default_validation.stride");
   EXPECT_TRUE(tree != nullptr);
   ASTFunctions::preprocess(tree);
   std::vector<LangError> errors;
@@ -214,7 +215,8 @@ TEST(Schema, ArrayDefaultValidation) {
 TEST(Schema, GeneratorListValidation) {
   auto strideroot = ASTFunctions::getDefaultStrideRoot();
   ASTNode tree;
-  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/09_generator_list_validation.stride");
+  tree = AST::parseFile(TESTS_SOURCE_DIR
+                        "schema/09_generator_list_validation.stride");
   EXPECT_TRUE(tree != nullptr);
   ASTFunctions::preprocess(tree);
   std::vector<LangError> errors;
@@ -231,7 +233,8 @@ TEST(Schema, GeneratorListValidation) {
 TEST(Schema, NumericConstraintsAndGuards) {
   auto strideroot = ASTFunctions::getDefaultStrideRoot();
   ASTNode tree;
-  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/10_numeric_constraints.stride");
+  tree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/10_numeric_constraints.stride");
   EXPECT_TRUE(tree != nullptr);
   ASTFunctions::preprocess(tree);
   std::vector<LangError> errors;
@@ -272,4 +275,50 @@ TEST(Schema, LiteralEnumsInAllowedTypes) {
   EXPECT_EQ(errors[3].lineNumber, 76); // switchEnum: on
   EXPECT_EQ(errors[4].lineNumber, 80); // mixedEnum: "fast"
   EXPECT_EQ(errors[5].lineNumber, 84); // openEnum: "other"
+}
+TEST(Schema, PublicAndWriteableFlags) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/12_public_writeable.stride");
+  ASSERT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 9);
+  // Error 1: declaration write to writeable: off property
+  EXPECT_EQ(errors[0].type, LangError::ReadOnlyPort);
+  EXPECT_EQ(errors[0].lineNumber, 79);
+
+  // Error 2: declaration write to writeable: off property
+  EXPECT_EQ(errors[1].type, LangError::ReadOnlyPort);
+  EXPECT_EQ(errors[1].lineNumber, 84);
+
+  // Error 3: direct member access read of private property
+  EXPECT_EQ(errors[2].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[2].lineNumber, 88);
+
+  // Error 4: direct member access read of private property
+  EXPECT_EQ(errors[3].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[3].lineNumber, 91);
+
+  // Error 5: member access in expression
+  EXPECT_EQ(errors[4].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[4].lineNumber, 94);
+
+  // Error 6: member access in list
+  EXPECT_EQ(errors[5].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[5].lineNumber, 97);
+
+  // Error 7: member access as property value in function call
+  EXPECT_EQ(errors[6].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[6].lineNumber, 100);
+
+  // Error 8: member access in expression within function call
+  EXPECT_EQ(errors[7].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[7].lineNumber, 103);
+
+  // Error 9: member access in list within function call
+  EXPECT_EQ(errors[8].type, LangError::PrivatePort);
+  EXPECT_EQ(errors[8].lineNumber, 106);
 }

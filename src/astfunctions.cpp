@@ -842,6 +842,13 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
                                      tree)) {
         ASTNode property =
             entityDecl->getPropertyValue(propertyNode->getPropertyName());
+        if (!property) {
+          auto propDecl = ASTQuery::findPropertyDeclaration(
+              entityDecl, propertyNode->getPropertyName(), scope, tree);
+          if (propDecl) {
+            property = propDecl->getPropertyValue("default");
+          }
+        }
         if (property) { // First replace if pointing to a name
           if (property->getNodeType() == AST::Entity ||
               property->getNodeType() == AST::Array) {
@@ -862,6 +869,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
     std::vector<std::shared_ptr<PropertyNode>> properties =
         func->getProperties();
     for (auto property : properties) {
+      resolveConstantsInNode(property->getValue(), scope, tree);
       std::shared_ptr<ValueNode> newValue =
           ASTFunctions::resolveConstant(property->getValue(), scope, tree);
       if (newValue) {
@@ -1122,6 +1130,13 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
                                    scope, tree)) {
       ASTNode propertyValue =
           entityDecl->getPropertyValue(propertyNode->getPropertyName());
+      if (!propertyValue) {
+        auto propDecl = ASTQuery::findPropertyDeclaration(
+            entityDecl, propertyNode->getPropertyName(), scope, tree);
+        if (propDecl) {
+          propertyValue = propDecl->getPropertyValue("default");
+        }
+      }
       if (propertyValue) {
         if (propertyValue->getNodeType() == AST::Int ||
             propertyValue->getNodeType() == AST::Real ||
