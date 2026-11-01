@@ -1333,6 +1333,54 @@ void ASTValidation::validateConstraintGuards(
         errors.push_back(error);
       }
     }
+  } else if (entityType == "constrainedList") {
+    auto minItemsNode = constrainDecl->getPropertyValue("minItems");
+    auto maxItemsNode = constrainDecl->getPropertyValue("maxItems");
+    if (minItemsNode && minItemsNode->getNodeType() == AST::Int &&
+        maxItemsNode && maxItemsNode->getNodeType() == AST::Int) {
+      int64_t minVal =
+          std::static_pointer_cast<ValueNode>(minItemsNode)->getIntValue();
+      int64_t maxVal =
+          std::static_pointer_cast<ValueNode>(maxItemsNode)->getIntValue();
+      if (minVal > maxVal) {
+        LangError error;
+        maxItemsNode->copyLocationTo(error);
+        error.type = LangError::ConstraintFail;
+        error.errorTokens.push_back(constrainDecl->getName().empty()
+                                        ? entityType
+                                        : constrainDecl->getName());
+        error.errorTokens.push_back("minItems/maxItems");
+        error.errorTokens.push_back(
+            "minItems must be less than or equal to maxItems");
+        error.errorTokens.push_back(std::to_string(minVal) + " > " +
+                                    std::to_string(maxVal));
+        errors.push_back(error);
+      }
+    }
+
+    auto minContainsNode = constrainDecl->getPropertyValue("minContains");
+    auto maxContainsNode = constrainDecl->getPropertyValue("maxContains");
+    if (minContainsNode && minContainsNode->getNodeType() == AST::Int &&
+        maxContainsNode && maxContainsNode->getNodeType() == AST::Int) {
+      int64_t minVal =
+          std::static_pointer_cast<ValueNode>(minContainsNode)->getIntValue();
+      int64_t maxVal =
+          std::static_pointer_cast<ValueNode>(maxContainsNode)->getIntValue();
+      if (minVal > maxVal) {
+        LangError error;
+        maxContainsNode->copyLocationTo(error);
+        error.type = LangError::ConstraintFail;
+        error.errorTokens.push_back(constrainDecl->getName().empty()
+                                        ? entityType
+                                        : constrainDecl->getName());
+        error.errorTokens.push_back("minContains/maxContains");
+        error.errorTokens.push_back(
+            "minContains must be less than or equal to maxContains");
+        error.errorTokens.push_back(std::to_string(minVal) + " > " +
+                                    std::to_string(maxVal));
+        errors.push_back(error);
+      }
+    }
   }
 }
 
@@ -1646,6 +1694,8 @@ void ASTValidation::validateConstrainedList(
     ASTNode tree, std::vector<std::string> parentNamespace,
     std::string currentFramework) {
 
+  validateConstraintGuards(constrainDecl, errors);
+
   int collSize =
       getCollectionSize(portValue, scopeStack, tree, currentFramework);
 
@@ -1717,6 +1767,165 @@ void ASTValidation::validateConstrainedList(
           error.errorTokens.push_back(AST::toText(portValue));
           errors.push_back(error);
         }
+      }
+    }
+  }
+
+  if (portValue->getNodeType() == AST::List) {
+    if (auto uniqueByNode = constrainDecl->getPropertyValue("uniqueBy")) {
+      std::string propName;
+      if (uniqueByNode->getNodeType() == AST::String) {
+        propName =
+            std::static_pointer_cast<ValueNode>(uniqueByNode)->getStringValue();
+      } else if (uniqueByNode->getNodeType() == AST::Entity) {
+        propName =
+            std::static_pointer_cast<EntityNode>(uniqueByNode)->getName();
+      }
+      if (!propName.empty()) {
+        bool repeated = false;
+        std::unordered_set<std::string> previousValues;
+        for (const auto &itemNode : portValue->getChildren()) {
+          std::shared_ptr<DeclarationNode> itemDecl = nullptr;
+          if (itemNode->getNodeType() == AST::Declaration ||
+              itemNode->getNodeType() == AST::ArrayDeclaration) {
+            itemDecl = std::static_pointer_cast<DeclarationNode>(itemNode);
+          } else if (itemNode->getNodeType() == AST::Entity ||
+                     itemNode->getNodeType() == AST::Array) {
+            std::string name = ASTQuery::getNodeName(itemNode);
+            std::vector<std::string> namespaces = itemNode->getNamespaceList();
+            namespaces.insert(namespaces.begin(), parentNamespace.begin(),
+                              parentNamespace.end());
+            itemDecl = ASTQuery::findDeclarationByName(
+                name, scopeStack, tree, namespaces, currentFramework);
+          }
+          ASTNode propVal = nullptr;
+          if (itemDecl) {
+            propVal = itemDecl->getPropertyValue(propName);
+            if (!propVal) {
+              if (propName == "name" && !itemDecl->getName().empty()) {
+                propVal = std::make_shared<ValueNode>(
+                    itemDecl->getName(), itemDecl->getFilename().c_str(),
+                    itemDecl->getLine());
+              } else {
+                auto propDecl = ASTQuery::findPropertyDeclaration(
+                    itemDecl, propName, scopeStack, tree);
+                if (propDecl) {
+                  propVal = propDecl->getPropertyValue("default");
+                }
+              }
+            }
+          }
+          std::string valStr;
+          if (propVal) {
+            if (propVal->getNodeType() == AST::Expression) {
+              auto resolved = ASTFunctions::resolveConstant(
+                  propVal, scopeStack, tree, currentFramework);
+              if (resolved) {
+                propVal = resolved;
+              }
+            }
+            if (propVal->getNodeType() == AST::String) {
+              valStr = std::static_pointer_cast<ValueNode>(propVal)
+                           ->getStringValue();
+            } else if (propVal->getNodeType() == AST::Int) {
+              valStr = std::to_string(
+                  std::static_pointer_cast<ValueNode>(propVal)->getIntValue());
+            } else if (propVal->getNodeType() == AST::Real) {
+              std::ostringstream ss;
+              ss << std::static_pointer_cast<ValueNode>(propVal)->toReal();
+              valStr = ss.str();
+            } else if (propVal->getNodeType() == AST::Switch) {
+              valStr =
+                  std::static_pointer_cast<ValueNode>(propVal)->getSwitchValue()
+                      ? "on"
+                      : "off";
+            } else {
+              valStr = AST::toText(propVal, 0, 0, false);
+            }
+          } else {
+            valStr = "<undefined>";
+          }
+          if (previousValues.find(valStr) != previousValues.end()) {
+            repeated = true;
+            break;
+          }
+          previousValues.insert(valStr);
+        }
+
+        if (repeated) {
+          LangError error;
+          portValue->copyLocationTo(error);
+          error.type = LangError::ConstraintFail;
+          error.errorTokens.push_back(declaration->getEntityType());
+          error.errorTokens.push_back(portName);
+          error.errorTokens.push_back(AST::toText(constrainDecl));
+          error.errorTokens.push_back(AST::toText(portValue));
+          errors.push_back(error);
+        }
+      }
+    }
+  }
+
+  auto containsNode = constrainDecl->getPropertyValue("contains");
+  if (containsNode && containsNode->getNodeType() != AST::None) {
+    std::vector<ASTNode> containsTypesList;
+    if (containsNode->getNodeType() == AST::List) {
+      containsTypesList = containsNode->getChildren();
+    } else {
+      containsTypesList.push_back(containsNode);
+    }
+    auto validContainsTypes = getValidTypeNames(
+        containsTypesList, scopeStack, tree, parentNamespace, currentFramework);
+
+    int matchCount = 0;
+    if (portValue->getNodeType() == AST::List) {
+      for (const auto &item : portValue->getChildren()) {
+        if (matchesAllowedType(item, validContainsTypes, scopeStack, tree,
+                               parentNamespace, currentFramework)) {
+          matchCount++;
+        }
+      }
+    } else if (portValue->getNodeType() == AST::GeneratorRange) {
+      auto dummyInt = std::make_shared<ValueNode>(
+          (int64_t)0, portValue->getFilename().c_str(), portValue->getLine());
+      if (matchesAllowedType(dummyInt, validContainsTypes, scopeStack, tree,
+                             parentNamespace, currentFramework)) {
+        matchCount =
+            getCollectionSize(portValue, scopeStack, tree, currentFramework);
+      }
+    }
+
+    int minContainsVal = 1;
+    auto minContainsNode = constrainDecl->getPropertyValue("minContains");
+    if (minContainsNode && minContainsNode->getNodeType() == AST::Int) {
+      minContainsVal =
+          std::static_pointer_cast<ValueNode>(minContainsNode)->getIntValue();
+    }
+
+    if (matchCount < minContainsVal) {
+      LangError error;
+      portValue->copyLocationTo(error);
+      error.type = LangError::ConstraintFail;
+      error.errorTokens.push_back(declaration->getEntityType());
+      error.errorTokens.push_back(portName);
+      error.errorTokens.push_back(AST::toText(constrainDecl));
+      error.errorTokens.push_back(AST::toText(portValue));
+      errors.push_back(error);
+    }
+
+    auto maxContainsNode = constrainDecl->getPropertyValue("maxContains");
+    if (maxContainsNode && maxContainsNode->getNodeType() == AST::Int) {
+      int maxContainsVal =
+          std::static_pointer_cast<ValueNode>(maxContainsNode)->getIntValue();
+      if (matchCount > maxContainsVal) {
+        LangError error;
+        portValue->copyLocationTo(error);
+        error.type = LangError::ConstraintFail;
+        error.errorTokens.push_back(declaration->getEntityType());
+        error.errorTokens.push_back(portName);
+        error.errorTokens.push_back(AST::toText(constrainDecl));
+        error.errorTokens.push_back(AST::toText(portValue));
+        errors.push_back(error);
       }
     }
   }

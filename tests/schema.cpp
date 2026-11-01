@@ -322,3 +322,34 @@ TEST(Schema, PublicAndWriteableFlags) {
   EXPECT_EQ(errors[8].type, LangError::PrivatePort);
   EXPECT_EQ(errors[8].lineNumber, 106);
 }
+TEST(Schema, AdvancedCollectionConstraints) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR
+                        "schema/13_advanced_collection_constraints.stride");
+  ASSERT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 5);
+  // Error 1: containsAtLeastOneA fails when 0 items match
+  EXPECT_EQ(errors[0].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[0].lineNumber, 96);
+
+  // Error 2: containsMinTwoA fails when only 1 item matches
+  EXPECT_EQ(errors[1].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[1].lineNumber, 101);
+
+  // Error 3: containsMaxTwoA fails when 3 items match
+  EXPECT_EQ(errors[2].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[2].lineNumber, 106);
+
+  // Error 4: uniqueByName fails with duplicate "alpha"
+  EXPECT_EQ(errors[3].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[3].lineNumber, 111);
+
+  // Error 5: uniqueByIndex fails with duplicate index 1
+  EXPECT_EQ(errors[4].type, LangError::ConstraintFail);
+  EXPECT_EQ(errors[4].lineNumber, 116);
+}

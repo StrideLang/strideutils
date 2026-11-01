@@ -1,0 +1,117 @@
+type ItemTypeA {
+    typeName: "itemA"
+    properties: [
+        typeProperty { name: "name" allowedTypes: _StringLiteral required: off },
+        typeProperty { name: "index" allowedTypes: _IntLiteral required: off }
+    ]
+}
+
+type ItemTypeB {
+    typeName: "itemB"
+    properties: [
+        typeProperty { name: "name" allowedTypes: _StringLiteral required: off },
+        typeProperty { name: "index" allowedTypes: _IntLiteral required: off }
+    ]
+}
+
+itemA A1 { name: "alpha" index: 1 }
+itemA A2 { name: "beta" index: 2 }
+itemA A3DuplicateName { name: "alpha" index: 3 }
+itemA A4DuplicateIndex { name: "gamma" index: 1 }
+
+itemB B1 { name: "b_one" index: 10 }
+itemB B2 { name: "b_two" index: 20 }
+
+type AdvancedListHolder {
+    typeName: "advancedListHolder"
+    properties: [
+        typeProperty {
+            name: "containsAtLeastOneA"
+            allowedTypes: [
+                constrainedList {
+                    contains: ItemTypeA
+                }
+            ]
+            default: []
+            required: off
+        },
+        typeProperty {
+            name: "containsMinTwoA"
+            allowedTypes: [
+                constrainedList {
+                    contains: ItemTypeA
+                    minContains: 2
+                }
+            ]
+            default: []
+            required: off
+        },
+        typeProperty {
+            name: "containsMaxTwoA"
+            allowedTypes: [
+                constrainedList {
+                    contains: ItemTypeA
+                    maxContains: 2
+                }
+            ]
+            default: []
+            required: off
+        },
+        typeProperty {
+            name: "uniqueByName"
+            allowedTypes: [
+                constrainedList {
+                    uniqueBy: "name"
+                }
+            ]
+            default: []
+            required: off
+        },
+        typeProperty {
+            name: "uniqueByIndex"
+            allowedTypes: [
+                constrainedList {
+                    uniqueBy: "index"
+                }
+            ]
+            default: []
+            required: off
+        }
+    ]
+}
+
+# --- Valid instances ---
+advancedListHolder ValidHolder {
+    containsAtLeastOneA: [A1, B1]
+    containsMinTwoA: [A1, A2, B1]
+    containsMaxTwoA: [A1, A2, B1]
+    uniqueByName: [A1, A2, B1]
+    uniqueByIndex: [A1, A2, B1]
+}
+
+# --- Failure instances ---
+
+# Error 1: containsAtLeastOneA has no items of type ItemTypeA
+advancedListHolder FailContainsZero {
+    containsAtLeastOneA: [B1, B2]
+}
+
+# Error 2: containsMinTwoA only has 1 item of type ItemTypeA
+advancedListHolder FailMinContains {
+    containsMinTwoA: [A1, B1]
+}
+
+# Error 3: containsMaxTwoA has 3 items of type ItemTypeA
+advancedListHolder FailMaxContains {
+    containsMaxTwoA: [A1, A2, A3DuplicateName]
+}
+
+# Error 4: uniqueByName has duplicate "alpha"
+advancedListHolder FailUniqueByName {
+    uniqueByName: [A1, A3DuplicateName]
+}
+
+# Error 5: uniqueByIndex has duplicate index 1
+advancedListHolder FailUniqueByIndex {
+    uniqueByIndex: [A1, A4DuplicateIndex]
+}
