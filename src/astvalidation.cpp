@@ -6,9 +6,9 @@
 #include "stride/parser/arraynode.h"
 #include "stride/parser/generatorrangenode.h"
 #include "stride/parser/rangenode.h"
-#include "stride/parser/strideparser.h"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -35,8 +35,9 @@ bool isDeclarationNode(const ASTNode &node) {
 }
 
 // Declaration named name in any enclosing scope frame.
-std::shared_ptr<DeclarationNode> findEnclosingDeclaration(
-    const std::string &name, const ScopeStack &scope, const ASTNode &self) {
+std::shared_ptr<DeclarationNode>
+findEnclosingDeclaration(const std::string &name, const ScopeStack &scope,
+                         const ASTNode &self) {
   for (const auto &frame : scope) {
     for (const auto &node : frame.second) {
       if (node == self || !isDeclarationNode(node)) {
@@ -188,27 +189,26 @@ void validateFrameworkDataType(const std::shared_ptr<DeclarationNode> &decl,
   }
   if (kindName == "integer") {
     if (bitCount != 8 && bitCount != 16 && bitCount != 32 && bitCount != 64) {
-      addDataTypeError(decl, name,
-                       "Integer types need bits: 8, 16, 32 or 64.", errors);
-    } else if (name != DataTypes::fixedTypeName(DataTypes::Kind::Integer,
-                                                 bitCount, true) &&
-               name != DataTypes::fixedTypeName(DataTypes::Kind::Integer,
-                                                 bitCount, false)) {
-      // The name is the only place the sign is set
-      addDataTypeError(decl, name,
-                       "An integer type with bits: " +
-                           std::to_string(bitCount) + " must be named Int" +
-                           std::to_string(bitCount) + " (signed) or UInt" +
-                           std::to_string(bitCount) +
-                           " (unsigned). Declare other names as an alias.",
+      addDataTypeError(decl, name, "Integer types need bits: 8, 16, 32 or 64.",
                        errors);
+    } else if (name != DataTypes::fixedTypeName(DataTypes::Kind::Integer,
+                                                bitCount, true) &&
+               name != DataTypes::fixedTypeName(DataTypes::Kind::Integer,
+                                                bitCount, false)) {
+      // The name is the only place the sign is set
+      addDataTypeError(
+          decl, name,
+          "An integer type with bits: " + std::to_string(bitCount) +
+              " must be named Int" + std::to_string(bitCount) +
+              " (signed) or UInt" + std::to_string(bitCount) +
+              " (unsigned). Declare other names as an alias.",
+          errors);
     }
   } else if (kindName == "float") {
     if (bitCount != 32 && bitCount != 64) {
       addDataTypeError(decl, name, "Float types need bits: 32 or 64.", errors);
-    } else if (name !=
-               DataTypes::fixedTypeName(DataTypes::Kind::Float, bitCount,
-                                        true)) {
+    } else if (name != DataTypes::fixedTypeName(DataTypes::Kind::Float,
+                                                bitCount, true)) {
       addDataTypeError(decl, name,
                        "A float type with bits: " + std::to_string(bitCount) +
                            " must be named Float" + std::to_string(bitCount) +
@@ -507,7 +507,8 @@ void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
       auto entityDecl = ASTQuery::findDeclarationByName(
           entityName, scopeStack, tree, namespaces, currentFramework);
       if (entityDecl) {
-        if (!ASTQuery::isPublicProperty(entityDecl, propName, scopeStack, tree)) {
+        if (!ASTQuery::isPublicProperty(entityDecl, propName, scopeStack,
+                                        tree)) {
           LangError error;
           error.type = LangError::PrivatePort;
           node->copyLocationTo(error);
@@ -899,9 +900,8 @@ void ASTValidation::validateTypesForDeclaration(
               (decl->getNodeType() == AST::ArrayDeclaration ||
                ASTQuery::isGenerator(decl));
 
-          bool isArrayInitList =
-              (isArrayOrGenerator &&
-               !portExpectsList && portValue->getNodeType() == AST::List);
+          bool isArrayInitList = (isArrayOrGenerator && !portExpectsList &&
+                                  portValue->getNodeType() == AST::List);
 
           if (isArrayInitList) {
             std::string validTypesList;
@@ -1140,8 +1140,8 @@ void ASTValidation::validateConstraintGuards(
   if (constrainDecl->getCompilerProperty("guardsValidated")) {
     return;
   }
-  constrainDecl->setCompilerProperty("guardsValidated",
-                                     std::make_shared<ValueNode>(true, __FILE__, __LINE__));
+  constrainDecl->setCompilerProperty(
+      "guardsValidated", std::make_shared<ValueNode>(true, __FILE__, __LINE__));
 
   const std::string &entityType = constrainDecl->getEntityType();
 
@@ -1710,8 +1710,8 @@ void ASTValidation::validateConstrainedList(
           << portName << "' in " << declaration->getEntityType() << std::endl;
     } else if (collSize > maxVal) {
       LangError error;
-          portValue->copyLocationTo(error);
-          error.type = LangError::ConstraintFail;
+      portValue->copyLocationTo(error);
+      error.type = LangError::ConstraintFail;
       error.errorTokens.push_back(declaration->getEntityType());
       error.errorTokens.push_back(portName);
       error.errorTokens.push_back(AST::toText(constrainDecl));
@@ -1731,8 +1731,8 @@ void ASTValidation::validateConstrainedList(
           << portName << "' in " << declaration->getEntityType() << std::endl;
     } else if (collSize < minVal) {
       LangError error;
-          portValue->copyLocationTo(error);
-          error.type = LangError::ConstraintFail;
+      portValue->copyLocationTo(error);
+      error.type = LangError::ConstraintFail;
       error.errorTokens.push_back(declaration->getEntityType());
       error.errorTokens.push_back(portName);
       error.errorTokens.push_back(AST::toText(constrainDecl));
@@ -1943,8 +1943,8 @@ void ASTValidation::validateConstrainedList(
           if (!matchesAllowedType(node, validTypes, scopeStack, tree,
                                   parentNamespace, currentFramework)) {
             LangError error;
-          portValue->copyLocationTo(error);
-          error.type = LangError::ConstraintFail;
+            portValue->copyLocationTo(error);
+            error.type = LangError::ConstraintFail;
             error.errorTokens.push_back(declaration->getEntityType());
             error.errorTokens.push_back(AST::toText(allowedNode));
             error.errorTokens.push_back(AST::toText(node));
@@ -2141,12 +2141,17 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
   } else if (child->getNodeType() == AST::Stream) {
     return std::string("_StreamType");
   } else if (child->getNodeType() == AST::Expression) {
-    auto resolved = ASTFunctions::resolveConstant(child, scopeStack, tree, currentFramework);
+    auto resolved = ASTFunctions::resolveConstant(child, scopeStack, tree,
+                                                  currentFramework);
     if (resolved) {
-      if (resolved->getNodeType() == AST::Int) return "_IntLiteral";
-      if (resolved->getNodeType() == AST::Real) return "_RealLiteral";
-      if (resolved->getNodeType() == AST::String) return "_StringLiteral";
-      if (resolved->getNodeType() == AST::Switch) return "_SwitchLiteral";
+      if (resolved->getNodeType() == AST::Int)
+        return "_IntLiteral";
+      if (resolved->getNodeType() == AST::Real)
+        return "_RealLiteral";
+      if (resolved->getNodeType() == AST::String)
+        return "_StringLiteral";
+      if (resolved->getNodeType() == AST::Switch)
+        return "_SwitchLiteral";
     }
   }
   return std::string();
@@ -2170,8 +2175,8 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
                                                      parentNamespace,
                                                      currentFramework)) {
         validTypeNames.push_back(typeCode);
-      } else if (auto typeClass =
-                     ASTQuery::findTypeClass(typeCode, tree, currentFramework)) {
+      } else if (auto typeClass = ASTQuery::findTypeClass(typeCode, tree,
+                                                          currentFramework)) {
         if (auto typesNode = typeClass->getPropertyValue("types")) {
           for (const auto &member : typesNode->getChildren()) {
             validTypeNames.push_back(ASTQuery::getNodeName(member));
@@ -2194,8 +2199,8 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
     } else if (validType->getNodeType() == AST::None) {
       validTypeNames.push_back("none");
     } else if (validType->getNodeType() == AST::Expression) {
-      auto resolved = ASTFunctions::resolveConstant(
-          validType, scopeStack, tree, currentFramework);
+      auto resolved = ASTFunctions::resolveConstant(validType, scopeStack, tree,
+                                                    currentFramework);
       if (resolved) {
         if (resolved->getNodeType() == AST::Int) {
           validTypeNames.push_back(std::to_string(
@@ -2544,8 +2549,7 @@ bool ASTValidation::matchesAllowedType(
       try {
         size_t idx = 0;
         double d = std::stod(vt, &idx);
-        if (idx == vt.size() &&
-            std::abs(d - static_cast<double>(val)) < 1e-6) {
+        if (idx == vt.size() && std::abs(d - static_cast<double>(val)) < 1e-6) {
           return true;
         }
       } catch (...) {
