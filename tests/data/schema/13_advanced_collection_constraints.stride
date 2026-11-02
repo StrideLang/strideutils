@@ -32,7 +32,7 @@ type AdvancedListHolder {
                     contains: ItemTypeA
                 }
             ]
-            default: []
+            default: [A1]
             required: off
         },
         typeProperty {
@@ -43,7 +43,7 @@ type AdvancedListHolder {
                     minContains: 2
                 }
             ]
-            default: []
+            default: [A1, A2]
             required: off
         },
         typeProperty {
@@ -54,7 +54,7 @@ type AdvancedListHolder {
                     maxContains: 2
                 }
             ]
-            default: []
+            default: [A1]
             required: off
         },
         typeProperty {

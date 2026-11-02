@@ -62,6 +62,12 @@ CacheManager::CacheManager()
       m_enabled = false;
     }
   }
+  if (const char *forceRecomp = std::getenv("STRIDE_FORCE_RECOMPILE")) {
+    std::string val(forceRecomp);
+    if (val == "1" || val == "true" || val == "TRUE" || val == "on") {
+      m_forceRecompile = true;
+    }
+  }
   if (const char *envDir = std::getenv("STRIDE_CACHE_DIR")) {
     if (envDir[0] != '\0') {
       m_explicitCacheDir = std::filesystem::path(envDir);

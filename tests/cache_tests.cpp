@@ -41,14 +41,17 @@ public:
     m_cacheDir = base / ".strdcache_custom";
     std::filesystem::create_directories(m_testDir);
     m_prevEnabled = CacheManager::instance().isEnabled();
+    m_prevForceRecompile = CacheManager::instance().isForceRecompile();
     m_prevCacheDir = CacheManager::instance().getCacheDirectory();
     CacheManager::instance().setEnabled(true);
+    CacheManager::instance().setForceRecompile(false);
     CacheManager::instance().setCacheDirectory(m_cacheDir);
     CacheManager::instance().resetStats();
   }
 
   ~ScopedCacheDir() {
     CacheManager::instance().setCacheDirectory(m_prevCacheDir);
+    CacheManager::instance().setForceRecompile(m_prevForceRecompile);
     CacheManager::instance().setEnabled(m_prevEnabled);
     CacheManager::instance().setSerializer(
         ASTSerializerFactory::createDefault());
@@ -64,6 +67,7 @@ private:
   std::filesystem::path m_cacheDir;
   std::filesystem::path m_prevCacheDir;
   bool m_prevEnabled{true};
+  bool m_prevForceRecompile{false};
 };
 
 } // namespace
