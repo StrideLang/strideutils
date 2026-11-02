@@ -1476,11 +1476,6 @@ void ASTValidation::validateConstrainedInt(
       }
     }
     auto allowedValuesNode = constrainDecl->getPropertyValue("allowedValues");
-    if (!allowedValuesNode || allowedValuesNode->getNodeType() == AST::None ||
-        (allowedValuesNode->getNodeType() == AST::List &&
-         allowedValuesNode->getChildren().empty())) {
-      allowedValuesNode = constrainDecl->getPropertyValue("enum");
-    }
     if (allowedValuesNode && allowedValuesNode->getNodeType() == AST::List) {
       const auto &children = allowedValuesNode->getChildren();
       if (!children.empty()) {
@@ -1610,11 +1605,6 @@ void ASTValidation::validateConstrainedReal(
       }
     }
     auto allowedValuesNode = constrainDecl->getPropertyValue("allowedValues");
-    if (!allowedValuesNode || allowedValuesNode->getNodeType() == AST::None ||
-        (allowedValuesNode->getNodeType() == AST::List &&
-         allowedValuesNode->getChildren().empty())) {
-      allowedValuesNode = constrainDecl->getPropertyValue("enum");
-    }
     if (allowedValuesNode && allowedValuesNode->getNodeType() == AST::List) {
       const auto &children = allowedValuesNode->getChildren();
       if (!children.empty()) {

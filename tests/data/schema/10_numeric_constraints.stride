@@ -25,7 +25,7 @@ type _NumericSchema {
             name: "intEnum"
             allowedTypes: [
                 constrainedInt {
-                    enum: [10, 20, 30]
+                    allowedValues: [10, 20, 30]
                 }
             ]
             default: none
@@ -45,7 +45,7 @@ type _NumericSchema {
             name: "realEnum"
             allowedTypes: [
                 constrainedReal {
-                    enum: [0.1, 0.2, 0.3]
+                    allowedValues: [0.1, 0.2, 0.3]
                 }
             ]
             default: none
