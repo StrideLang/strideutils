@@ -33,7 +33,7 @@
 namespace strd {
 typedef std::vector<std::pair<ASTNode, std::vector<ASTNode>>> ScopeStack;
 
-struct StreamBlockDescriptor {
+struct StreamEntityDescriptor {
   std::string propertyName;
   std::vector<std::shared_ptr<StreamNode>> streams;
   std::string executionStage; // e.g. "default", "onEntry", "updateGuard"
@@ -42,8 +42,8 @@ struct StreamBlockDescriptor {
 class ASTQuery {
 public:
   // Stream discovery
-  static std::vector<StreamBlockDescriptor>
-  getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
+  static std::vector<StreamEntityDescriptor>
+  getContainedStreamEntities(std::shared_ptr<DeclarationNode> decl,
                            const ScopeStack &scope, ASTNode tree);
 
   static std::vector<std::shared_ptr<SystemNode>> getSystemNodes(ASTNode tree);

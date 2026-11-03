@@ -61,7 +61,7 @@ void validateShadowingInScope(ScopeStack &scope, const ASTNode &tree,
       continue;
     }
     auto decl = std::static_pointer_cast<DeclarationNode>(node);
-    auto blocks = decl->getPropertyValue("blocks");
+    auto blocks = decl->getPropertyValue("entities");
     if (!blocks || blocks->getNodeType() != AST::List) {
       continue;
     }
@@ -178,7 +178,7 @@ void validateFrameworkDataType(const std::shared_ptr<DeclarationNode> &decl,
                      "A data type needs a kind (\"integer\", \"float\", "
                      "\"switch\" or \"string\"). Other names for a type "
                      "are aliases: alias " +
-                         name + " { block: Int32 }",
+                         name + " { entity: Int32 }",
                      errors);
     return;
   }
@@ -885,7 +885,7 @@ void ASTValidation::validateTypesForDeclaration(
               portTypesList, scopeStack, tree, {}, currentFramework);
           bool allowsBlock =
               std::find(validTypeNames.begin(), validTypeNames.end(),
-                        "_Block") != validTypeNames.end();
+                        "_Entity") != validTypeNames.end();
 
           bool portExpectsList = portExpectsListType(portTypesList);
           bool valueIsCollection =
@@ -1966,7 +1966,7 @@ void ASTValidation::validateConstrainedList(
             name, scopeStack, tree, namespaces, currentFramework);
         std::shared_ptr<DeclarationNode> typeDecl = nullptr;
         if (foundDecl->getEntityType() == "type" ||
-            foundDecl->getEntityType() == "platformBlock") {
+            foundDecl->getEntityType() == "platformEntity") {
           typeDecl = foundDecl;
         } else {
           typeDecl = ASTQuery::findTypeDeclaration(foundDecl, scopeStack, tree,
@@ -2074,7 +2074,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
       child->getNodeType() == AST::ArrayDeclaration) {
     auto decl = std::static_pointer_cast<DeclarationNode>(child);
     if (decl->getEntityType() == "type" ||
-        decl->getEntityType() == "platformBlock") {
+        decl->getEntityType() == "platformEntity") {
       return decl->getName();
     }
     auto typeDeclaration =
@@ -2097,7 +2097,7 @@ std::string ASTValidation::getTypeName(ASTNode child, ScopeStack scopeStack,
                                                 currentFramework);
     if (decl) {
       if (decl->getEntityType() == "type" ||
-          decl->getEntityType() == "platformBlock") {
+          decl->getEntityType() == "platformEntity") {
         return decl->getName();
       }
       auto typeDeclaration = ASTQuery::findTypeDeclaration(
@@ -2221,8 +2221,8 @@ std::vector<std::string> ASTValidation::getValidTypeNames(
         validTypeNames.push_back("_ExplicitList");
       } else if (blockNode->getName() == "_GeneratorRange") {
         validTypeNames.push_back("_GeneratorRange");
-      } else if (blockNode->getName() == "_Block") {
-        validTypeNames.push_back("_Block");
+      } else if (blockNode->getName() == "_Entity") {
+        validTypeNames.push_back("_Entity");
       } else if (blockNode->getName() == "none") {
         validTypeNames.push_back("none");
       } else if (auto typeClass = ASTQuery::findTypeClass(
@@ -2463,7 +2463,7 @@ bool ASTValidation::matchesAllowedType(
 
   // 1b. Check _Block wildcard / type: matches any block declaration entity
   // (scalar or bundle)
-  if (std::find(validTypes.begin(), validTypes.end(), "_Block") !=
+  if (std::find(validTypes.begin(), validTypes.end(), "_Entity") !=
       validTypes.end()) {
     if (element->getNodeType() == AST::Entity) {
       std::string name = ASTQuery::getNodeName(element);
@@ -2636,7 +2636,7 @@ bool ASTValidation::matchesAllowedType(
     auto decl = std::static_pointer_cast<DeclarationNode>(element);
     std::shared_ptr<DeclarationNode> typeDecl = nullptr;
     if (decl->getEntityType() == "type" ||
-        decl->getEntityType() == "platformBlock") {
+        decl->getEntityType() == "platformEntity") {
       typeDecl = decl;
     } else {
       typeDecl = ASTQuery::findTypeDeclaration(decl, scopeStack, tree,
@@ -2680,7 +2680,7 @@ bool ASTValidation::matchesAllowedType(
       }
       std::shared_ptr<DeclarationNode> typeDecl = nullptr;
       if (decl->getEntityType() == "type" ||
-          decl->getEntityType() == "platformBlock") {
+          decl->getEntityType() == "platformEntity") {
         typeDecl = decl;
       } else {
         typeDecl = ASTQuery::findTypeDeclaration(decl, scopeStack, tree,

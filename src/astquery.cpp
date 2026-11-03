@@ -53,10 +53,10 @@ bool declMatchesNameAndAt(const std::string &objectName,
 }
 } // namespace
 
-std::vector<StreamBlockDescriptor>
-ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
+std::vector<StreamEntityDescriptor>
+ASTQuery::getContainedStreamEntities(std::shared_ptr<DeclarationNode> decl,
                                    const ScopeStack &scope, ASTNode tree) {
-  std::vector<StreamBlockDescriptor> descriptors;
+  std::vector<StreamEntityDescriptor> descriptors;
   if (!decl) {
     return descriptors;
   }
@@ -110,10 +110,10 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
     }
     if (typeItem->getNodeType() == AST::Declaration) {
       auto d = std::static_pointer_cast<DeclarationNode>(typeItem);
-      auto isStreamBlockNode = d->getPropertyValue("isStreamBlock");
-      if (isStreamBlockNode &&
-          isStreamBlockNode->getNodeType() == AST::Switch) {
-        if (std::static_pointer_cast<ValueNode>(isStreamBlockNode)
+      auto isStreamEntityNode = d->getPropertyValue("isStreamEntity");
+      if (isStreamEntityNode &&
+          isStreamEntityNode->getNodeType() == AST::Switch) {
+        if (std::static_pointer_cast<ValueNode>(isStreamEntityNode)
                 ->getSwitchValue()) {
           return true;
         }
@@ -163,10 +163,10 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
 
     bool isStreamContainer = false;
 
-    // Check isStreamBlock: on
-    auto isStreamBlockNode = propDef->getPropertyValue("isStreamBlock");
-    if (isStreamBlockNode && isStreamBlockNode->getNodeType() == AST::Switch) {
-      isStreamContainer = std::static_pointer_cast<ValueNode>(isStreamBlockNode)
+    // Check isStreamEntity: on
+    auto isStreamEntityNode = propDef->getPropertyValue("isStreamEntity");
+    if (isStreamEntityNode && isStreamEntityNode->getNodeType() == AST::Switch) {
+      isStreamContainer = std::static_pointer_cast<ValueNode>(isStreamEntityNode)
                               ->getSwitchValue();
     }
 
@@ -222,7 +222,7 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
       if (!prop)
         continue;
       std::string propName = prop->getName();
-      if (propName == "blocks")
+      if (propName == "entities")
         continue;
       if (collectedProps.count(propName))
         continue;
@@ -245,7 +245,7 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
     if (!prop)
       continue;
     std::string propName = prop->getName();
-    if (propName == "blocks")
+    if (propName == "entities")
       continue; // child blocks are scoped separately
     if (propName == "streams")
       continue;
@@ -256,7 +256,7 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
     if (propVal->getNodeType() == AST::Declaration ||
         propVal->getNodeType() == AST::ArrayDeclaration) {
       auto childDecl = std::static_pointer_cast<DeclarationNode>(propVal);
-      auto childBlocks = getContainedStreamBlocks(childDecl, scope, tree);
+      auto childBlocks = getContainedStreamEntities(childDecl, scope, tree);
       descriptors.insert(descriptors.end(), childBlocks.begin(),
                          childBlocks.end());
     } else if (propVal->getNodeType() == AST::List) {
@@ -264,7 +264,7 @@ ASTQuery::getContainedStreamBlocks(std::shared_ptr<DeclarationNode> decl,
         if (item && (item->getNodeType() == AST::Declaration ||
                      item->getNodeType() == AST::ArrayDeclaration)) {
           auto childDecl = std::static_pointer_cast<DeclarationNode>(item);
-          auto childBlocks = getContainedStreamBlocks(childDecl, scope, tree);
+          auto childBlocks = getContainedStreamEntities(childDecl, scope, tree);
           descriptors.insert(descriptors.end(), childBlocks.begin(),
                              childBlocks.end());
         }
@@ -440,7 +440,7 @@ std::shared_ptr<DeclarationNode> ASTQuery::findTypeDeclarationByName(
     std::shared_ptr<DeclarationNode> declarationNode =
         std::static_pointer_cast<DeclarationNode>(scopeMember);
     if (declarationNode->getEntityType() == "type" ||
-        declarationNode->getEntityType() == "platformBlock") {
+        declarationNode->getEntityType() == "platformEntity") {
       ASTNode valueNode = declarationNode->getPropertyValue("typeName");
       if (valueNode && valueNode->getNodeType() == AST::String) {
         auto value = std::static_pointer_cast<ValueNode>(valueNode);
@@ -969,7 +969,7 @@ ASTQuery::getPortsForType(std::string typeName, ScopeStack scope, ASTNode tree,
   if (typeDecl) {
     if (typeDecl->getEntityType() == "type" ||
         typeDecl->getEntityType() == "platformModule" ||
-        typeDecl->getEntityType() == "platformBlock") {
+        typeDecl->getEntityType() == "platformEntity") {
       ValueNode *name = static_cast<ValueNode *>(
           typeDecl->getPropertyValue("typeName").get());
       if (name) {
@@ -1215,7 +1215,7 @@ ASTQuery::getModuleEntities(std::shared_ptr<DeclarationNode> moduleDecl) {
   if (!moduleDecl)
     return blocks;
 
-  ASTNode blocksNode = moduleDecl->getPropertyValue("blocks");
+  ASTNode blocksNode = moduleDecl->getPropertyValue("entities");
   if (blocksNode) {
     if (blocksNode->getNodeType() == AST::Declaration ||
         blocksNode->getNodeType() == AST::ArrayDeclaration) {
@@ -1272,7 +1272,7 @@ ASTQuery::getStateMachineEntities(std::shared_ptr<DeclarationNode> stateDecl) {
     }
   };
 
-  addPropBlocks("blocks");
+  addPropBlocks("entities");
   addPropBlocks("states");
   addPropBlocks("transitions");
 
@@ -1407,23 +1407,23 @@ ASTQuery::getModulePort(std::shared_ptr<DeclarationNode> moduleDecl,
 }
 
 std::vector<std::string>
-ASTQuery::getModulePortNames(std::shared_ptr<DeclarationNode> blockDeclaration,
+ASTQuery::getModulePortNames(std::shared_ptr<DeclarationNode> entityDeclaration,
                              const ScopeStack &scope, ASTNode tree) {
   std::vector<std::string> portNames;
-  if (!blockDeclaration)
+  if (!entityDeclaration)
     return portNames;
 
-  auto typeDecl = ASTQuery::findTypeDeclaration(blockDeclaration, scope, tree);
+  auto typeDecl = ASTQuery::findTypeDeclaration(entityDeclaration, scope, tree);
   if (!typeDecl) {
     typeDecl = ASTQuery::findTypeDeclarationByName(
-        blockDeclaration->getEntityType(), scope, tree);
+        entityDeclaration->getEntityType(), scope, tree);
   }
   bool isCodeGen = isCodeGenerator(typeDecl, scope, tree) ||
-                   isCodeGenerator(blockDeclaration, scope, tree);
+                   isCodeGenerator(entityDeclaration, scope, tree);
 
-  if (isCodeGen || blockDeclaration->getEntityType() == "platformModule") {
+  if (isCodeGen || entityDeclaration->getEntityType() == "platformModule") {
     auto portsList = std::static_pointer_cast<ListNode>(
-        blockDeclaration->getPropertyValue("ports"));
+        entityDeclaration->getPropertyValue("ports"));
     if (portsList && portsList->getNodeType() == AST::List) {
       for (const ASTNode &portDeclaration : portsList->getChildren()) {
         if (portDeclaration->getNodeType() == AST::Declaration) {
@@ -1445,11 +1445,11 @@ ASTQuery::getModulePortNames(std::shared_ptr<DeclarationNode> blockDeclaration,
 }
 
 ASTNode ASTQuery::getMemberFromArrayConst(
-    std::shared_ptr<DeclarationNode> blockDecl, int index, ASTNode tree,
+    std::shared_ptr<DeclarationNode> entityDecl, int index, ASTNode tree,
     ScopeStack scopeStack, std::vector<LangError> *errors) {
   ASTNode out = nullptr;
-  if (blockDecl) {
-    auto ports = blockDecl->getProperties();
+  if (entityDecl) {
+    auto ports = entityDecl->getProperties();
     for (const std::shared_ptr<PropertyNode> &port : ports) {
       if (port->getName() == "value" || port->getName() == "default") {
         ASTNode value = port->getValue();
@@ -1464,8 +1464,8 @@ ASTNode ASTQuery::getMemberFromArrayConst(
           return nullptr;
         } else if (value && value->getNodeType() == AST::Array) {
           auto decl = ASTQuery::findDeclarationByName(
-              ASTQuery::getNodeName(blockDecl), scopeStack, tree,
-              blockDecl->getNamespaceList());
+              ASTQuery::getNodeName(entityDecl), scopeStack, tree,
+              entityDecl->getNamespaceList());
           auto indexList = std::static_pointer_cast<ArrayNode>(value);
           if (indexList->getChildren().size() == 1) {
             auto previousErrors = errors ? errors->size() : 0;
@@ -1520,14 +1520,14 @@ std::shared_ptr<PropertyNode> ASTQuery::findPropertyByName(
     }
   }
   std::string alias;
-  if (propertyName == "blocks") {
+  if (propertyName == "entities") {
     alias = "entities";
   } else if (propertyName == "entities") {
-    alias = "blocks";
-  } else if (propertyName == "block") {
+    alias = "entities";
+  } else if (propertyName == "entity") {
     alias = "entity";
   } else if (propertyName == "entity") {
-    alias = "block";
+    alias = "entity";
   }
   if (!alias.empty()) {
     for (auto property : properties) {
@@ -1626,7 +1626,7 @@ ScopeStack ASTQuery::getEnclosingScopeAt(ASTNode tree, int line, int column) {
       if (child && child->getNodeType() == AST::Declaration &&
           nodeContainsPosition(child, line, column)) {
         auto decl = std::static_pointer_cast<DeclarationNode>(child);
-        auto blocks = decl->getPropertyValue("blocks");
+        auto blocks = decl->getPropertyValue("entities");
         if (blocks && blocks->getNodeType() == AST::List) {
           scope.push_back({decl, blocks->getChildren()});
         } else {
@@ -1785,14 +1785,14 @@ bool ASTQuery::isStronglyTyped(std::shared_ptr<DeclarationNode> typeDecl,
   }
 
   // For standard modules, check all entities/blocks.
-  auto blocksList = typeDecl->getPropertyValue("blocks");
+  auto blocksList = typeDecl->getPropertyValue("entities");
   if (blocksList && blocksList->getNodeType() == AST::List) {
     for (const auto &blockNode : blocksList->getChildren()) {
-      auto blockDecl = std::static_pointer_cast<DeclarationNode>(blockNode);
-      if (blockDecl && blockDecl->getEntityType() == "signal") {
+      auto entityDecl = std::static_pointer_cast<DeclarationNode>(blockNode);
+      if (entityDecl && entityDecl->getEntityType() == "signal") {
         // Ports declare no type. Blocks typed from a port (Port.type) are
         // generic, as their type depends on the connection.
-        auto typeNode = blockDecl->getPropertyValue("type");
+        auto typeNode = entityDecl->getPropertyValue("type");
         if (!typeNode || typeNode->getNodeType() == AST::None ||
             typeNode->getNodeType() == AST::MemberAccess) {
           return false;
@@ -1811,7 +1811,7 @@ bool ASTQuery::isInputPort(std::shared_ptr<DeclarationNode> entityDecl,
     return false;
   auto mainInputPort = ASTQuery::getModuleMainInputPort(funcDecl);
   if (mainInputPort) {
-    auto mainInputEntityNode = mainInputPort->getPropertyValue("block");
+    auto mainInputEntityNode = mainInputPort->getPropertyValue("entity");
     if (mainInputEntityNode &&
         mainInputEntityNode->getNodeType() == AST::Entity) {
       if (std::static_pointer_cast<EntityNode>(mainInputEntityNode)
@@ -1823,7 +1823,7 @@ bool ASTQuery::isInputPort(std::shared_ptr<DeclarationNode> entityDecl,
 
   auto propertyInputPorts = ASTQuery::getModulePropertyInputPorts(funcDecl);
   for (const auto &port : propertyInputPorts) {
-    auto propertyInputEntityNode = port->getPropertyValue("block");
+    auto propertyInputEntityNode = port->getPropertyValue("entity");
     if (propertyInputEntityNode &&
         propertyInputEntityNode->getNodeType() == AST::Entity) {
       if (std::static_pointer_cast<EntityNode>(propertyInputEntityNode)
@@ -1842,7 +1842,7 @@ bool ASTQuery::isOutputPort(std::shared_ptr<DeclarationNode> entityDecl,
     return false;
   auto mainOutputPort = ASTQuery::getModuleMainOutputPort(funcDecl);
   if (mainOutputPort) {
-    auto mainOutputEntityNode = mainOutputPort->getPropertyValue("block");
+    auto mainOutputEntityNode = mainOutputPort->getPropertyValue("entity");
     if (mainOutputEntityNode &&
         mainOutputEntityNode->getNodeType() == AST::Entity) {
       if (std::static_pointer_cast<EntityNode>(mainOutputEntityNode)
@@ -1854,7 +1854,7 @@ bool ASTQuery::isOutputPort(std::shared_ptr<DeclarationNode> entityDecl,
 
   auto propertyOutputPorts = ASTQuery::getModulePropertyOutputPorts(funcDecl);
   for (const auto &port : propertyOutputPorts) {
-    auto propertyOutputEntityNode = port->getPropertyValue("block");
+    auto propertyOutputEntityNode = port->getPropertyValue("entity");
     if (propertyOutputEntityNode &&
         propertyOutputEntityNode->getNodeType() == AST::Entity) {
       if (std::static_pointer_cast<EntityNode>(propertyOutputEntityNode)

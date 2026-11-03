@@ -11,7 +11,7 @@ myExtendedState MyExtendedState {}
 
 module JustABlock {}
 state NestedState {
-    blocks: [
+    entities: [
         signal MySignal {}
     ]
 }

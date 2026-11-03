@@ -42,10 +42,10 @@ signal SList[2] { default: [0, 0] }
 
 module TestModule {
     ports: [
-        propertyInputPort ValPort { name: "val" block: Val }
-        propertyInputPort ItemsPort { name: "items" block: Items }
+        propertyInputPort ValPort { name: "val" entity: Val }
+        propertyInputPort ItemsPort { name: "items" entity: Items }
     ]
-    blocks: [
+    entities: [
         signal Val { type: Int }
         signal Items[2] { type: Int }
     ]

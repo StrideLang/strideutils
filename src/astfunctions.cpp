@@ -576,11 +576,11 @@ void ASTFunctions::fillDefaultProperties(ASTNode tree) {
 }
 
 ASTNode
-ASTFunctions::getPortBlockDefault(DeclarationNode *portDecl,
+ASTFunctions::getPortEntityDefault(DeclarationNode *portDecl,
                                   std::shared_ptr<DeclarationNode> moduleDecl) {
   // Ports have no default. It comes from the declaration of the bound block.
-  auto blockNode = portDecl->getPropertyValue("block");
-  auto blocksNode = moduleDecl->getPropertyValue("blocks");
+  auto blockNode = portDecl->getPropertyValue("entity");
+  auto blocksNode = moduleDecl->getPropertyValue("entities");
   if (!blockNode || blockNode->getNodeType() != AST::Entity || !blocksNode) {
     return nullptr;
   }
@@ -655,21 +655,7 @@ void ASTFunctions::fillDefaultPropertiesForNode(
           break;
         }
       }
-      if (!propertySet) {
-        std::string alias;
-        if (propertyName == "blocks") alias = "entities";
-        else if (propertyName == "entities") alias = "blocks";
-        else if (propertyName == "block") alias = "entity";
-        else if (propertyName == "entity") alias = "block";
-        if (!alias.empty()) {
-          for (const auto &blockProperty : blockProperties) {
-            if (blockProperty->getName() == alias) {
-              propertySet = true;
-              break;
-            }
-          }
-        }
-      }
+
       if (!propertySet) {
         ASTNode defaultValueNode = portDescription->getPropertyValue("default");
         if (defaultValueNode) {
@@ -734,7 +720,7 @@ void ASTFunctions::fillDefaultPropertiesForNode(
               }
               if (!propertySet) {
                 ASTNode defaultValueNode =
-                    getPortBlockDefault(propertyDecl, functionModule);
+                    getPortEntityDefault(propertyDecl, functionModule);
                 if (defaultValueNode) {
                   std::shared_ptr<PropertyNode> newProperty =
                       std::make_shared<PropertyNode>(
@@ -898,7 +884,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
     std::vector<std::shared_ptr<PropertyNode>> properties =
         decl->getProperties();
     std::shared_ptr<ListNode> internalBlocks =
-        std::static_pointer_cast<ListNode>(decl->getPropertyValue("blocks"));
+        std::static_pointer_cast<ListNode>(decl->getPropertyValue("entities"));
     // TODO namespaces
     if (ASTQuery::isCodeGenerator(
             ASTQuery::findDeclarationByName(decl->getName(), scope, tree),
@@ -1538,7 +1524,7 @@ ASTFunctions::processAnonDeclsForScope(const std::vector<ASTNode> scopeTree) {
           decl->getEntityType() == "module" ||
           decl->getEntityType() == "loop") {
         auto streams = decl->getPropertyValue("streams");
-        auto blocks = decl->getPropertyValue("blocks");
+        auto blocks = decl->getPropertyValue("entities");
         //          Q_ASSERT(streams && blocks);
         if (streams && blocks) {
 

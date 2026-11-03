@@ -18,7 +18,7 @@ type BlockTestingType {
     properties: [
         typeProperty BlockProp {
             name: "blockProp"
-            allowedTypes: _Block
+            allowedTypes: _Entity
             required: on
         }
     ]

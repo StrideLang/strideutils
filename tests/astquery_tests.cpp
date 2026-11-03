@@ -33,7 +33,7 @@ TEST_F(ASTQueryTest, FindAllDeclarations) {
   ASSERT_NE(queryTestDecl, nullptr);
   ScopeStack scope = {
       {queryTestDecl,
-       queryTestDecl->getPropertyValue("blocks")->getChildren()}};
+       queryTestDecl->getPropertyValue("entities")->getChildren()}};
 
   auto decls = ASTQuery::findAllDeclarations("MyConstant", scope, tree);
   ASSERT_EQ(decls.size(), 1);
@@ -73,7 +73,7 @@ TEST_F(ASTQueryTest, GetInheritedTypes) {
   ASSERT_NE(queryTestDecl, nullptr);
   ScopeStack scope = {
       {queryTestDecl,
-       queryTestDecl->getPropertyValue("blocks")->getChildren()}};
+       queryTestDecl->getPropertyValue("entities")->getChildren()}};
 
   auto constantDecl =
       ASTQuery::findDeclarationByName("MyConstant", scope, tree);
@@ -88,7 +88,7 @@ TEST_F(ASTQueryTest, IsConstant) {
   ASSERT_NE(queryTestDecl, nullptr);
   ScopeStack scope = {
       {queryTestDecl,
-       queryTestDecl->getPropertyValue("blocks")->getChildren()}};
+       queryTestDecl->getPropertyValue("entities")->getChildren()}};
 
   auto constantDecl =
       ASTQuery::findDeclarationByName("MyConstant", scope, tree);
@@ -152,7 +152,7 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksStructuralAndNested) {
   streamList->addChild(s1);
   addProp(moduleDecl, "streams", streamList);
 
-  auto modBlocks = ASTQuery::getContainedStreamBlocks(moduleDecl, {}, tree);
+  auto modBlocks = ASTQuery::getContainedStreamEntities(moduleDecl, {}, tree);
   ASSERT_EQ(modBlocks.size(), 1);
   EXPECT_EQ(modBlocks[0].propertyName, "streams");
   EXPECT_EQ(modBlocks[0].executionStage, "default");
@@ -190,7 +190,7 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksStructuralAndNested) {
   transList->addChild(transDecl);
   addProp(stateDecl, "transitions", transList);
 
-  auto stateBlocks = ASTQuery::getContainedStreamBlocks(stateDecl, {}, tree);
+  auto stateBlocks = ASTQuery::getContainedStreamEntities(stateDecl, {}, tree);
   ASSERT_EQ(stateBlocks.size(), 3);
   std::set<std::string> stages;
   for (const auto &b : stateBlocks) {
@@ -209,7 +209,7 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksSchemaReflection) {
 
   // Create schema type definition for a custom pipeline stage
   // type _PipelineType { typeName: "pipeline" properties: [ typeProperty {
-  // name: "stage1" isStreamBlock: on executionStage: "step1" } ] }
+  // name: "stage1" isStreamEntity: on executionStage: "step1" } ] }
   auto schemaType = std::make_shared<DeclarationNode>("_PipelineType", "type",
                                                       nullptr, "test", 1);
   addProp(schemaType, "typeName",
@@ -219,7 +219,7 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksSchemaReflection) {
                                                    nullptr, "test", 1);
   addProp(propDef, "name",
           std::make_shared<ValueNode>(std::string("stage1"), "test", 1));
-  addProp(propDef, "isStreamBlock",
+  addProp(propDef, "isStreamEntity",
           std::make_shared<ValueNode>(true, "test", 1));
   addProp(propDef, "executionStage",
           std::make_shared<ValueNode>(std::string("step1"), "test", 1));
@@ -239,7 +239,7 @@ TEST_F(ASTQueryTest, GetContainedStreamBlocksSchemaReflection) {
   pipeStreams->addChild(sPipe);
   addProp(pipeDecl, "stage1", pipeStreams);
 
-  auto pipeBlocks = ASTQuery::getContainedStreamBlocks(pipeDecl, {}, tree);
+  auto pipeBlocks = ASTQuery::getContainedStreamEntities(pipeDecl, {}, tree);
   ASSERT_EQ(pipeBlocks.size(), 1);
   EXPECT_EQ(pipeBlocks[0].propertyName, "stage1");
   EXPECT_EQ(pipeBlocks[0].executionStage, "step1");
@@ -273,7 +273,7 @@ TEST_F(ASTQueryTest, PropertyDeclarationQueries) {
   ASSERT_NE(queryTestDecl, nullptr);
   ScopeStack scope = {
       {queryTestDecl,
-       queryTestDecl->getPropertyValue("blocks")->getChildren()}};
+       queryTestDecl->getPropertyValue("entities")->getChildren()}};
 
   auto inBlockDecl = ASTQuery::findDeclarationByName("InBlock", scope, tree);
   ASSERT_NE(inBlockDecl, nullptr);

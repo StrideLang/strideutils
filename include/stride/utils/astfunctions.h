@@ -86,7 +86,7 @@ public:
 
   // Default for a property port, taken from the declaration of its bound
   // block in moduleDecl. nullptr if the block declares no literal default.
-  static ASTNode getPortBlockDefault(DeclarationNode *portDecl,
+  static ASTNode getPortEntityDefault(DeclarationNode *portDecl,
                                      std::shared_ptr<DeclarationNode> moduleDecl);
 
   // Process Anonymous declarations inside streams
