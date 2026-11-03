@@ -656,6 +656,21 @@ void ASTFunctions::fillDefaultPropertiesForNode(
         }
       }
       if (!propertySet) {
+        std::string alias;
+        if (propertyName == "blocks") alias = "entities";
+        else if (propertyName == "entities") alias = "blocks";
+        else if (propertyName == "block") alias = "entity";
+        else if (propertyName == "entity") alias = "block";
+        if (!alias.empty()) {
+          for (const auto &blockProperty : blockProperties) {
+            if (blockProperty->getName() == alias) {
+              propertySet = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!propertySet) {
         ASTNode defaultValueNode = portDescription->getPropertyValue("default");
         if (defaultValueNode) {
           std::shared_ptr<PropertyNode> newProperty =

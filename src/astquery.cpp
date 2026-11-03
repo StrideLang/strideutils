@@ -1519,6 +1519,23 @@ std::shared_ptr<PropertyNode> ASTQuery::findPropertyByName(
       return property;
     }
   }
+  std::string alias;
+  if (propertyName == "blocks") {
+    alias = "entities";
+  } else if (propertyName == "entities") {
+    alias = "blocks";
+  } else if (propertyName == "block") {
+    alias = "entity";
+  } else if (propertyName == "entity") {
+    alias = "block";
+  }
+  if (!alias.empty()) {
+    for (auto property : properties) {
+      if (property->getName() == alias) {
+        return property;
+      }
+    }
+  }
   return nullptr;
 }
 
