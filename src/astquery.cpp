@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <iostream>
@@ -2388,4 +2390,70 @@ bool DataTypes::implicitlyConvertible(const std::string &from,
     return infoTo.bits > infoFrom.bits;
   }
   return infoTo.bits >= infoFrom.bits;
+}
+
+std::string DataTypes::literalType(const ValueNode &literal) {
+  auto type = literal.getLiteralType();
+  if (!type.empty()) {
+    return type;
+  }
+  return literal.getNodeType() == AST::Real ? Real : Int;
+}
+
+bool DataTypes::literalFits(const ValueNode &literal, const Info &to) {
+  if (to.isFloat()) {
+    return true; // Literals are written for the type they go to
+  }
+  if (!to.isInteger()) {
+    return false;
+  }
+  if (literal.getNodeType() == AST::Int && literal.hasUnsignedSuffix()) {
+    auto value = static_cast<uint64_t>(literal.getIntValue());
+    uint64_t maximum = to.isSigned      ? (uint64_t(1) << (to.bits - 1)) - 1
+                       : to.bits == 64 ? UINT64_MAX
+                                       : (uint64_t(1) << to.bits) - 1;
+    return value <= maximum;
+  }
+  double real = literal.getNodeType() == AST::Int
+                    ? static_cast<double>(literal.getIntValue())
+                    : literal.getRealValue();
+  if (literal.getNodeType() == AST::Real && real != std::trunc(real)) {
+    return false;
+  }
+  double minimum = to.isSigned ? -std::ldexp(1.0, to.bits - 1) : 0.0;
+  double maximum = to.isSigned ? std::ldexp(1.0, to.bits - 1) - 1
+                               : std::ldexp(1.0, to.bits) - 1;
+  return real >= minimum && real <= maximum;
+}
+
+std::string DataTypes::widenedType(const std::string &type,
+                                   const std::string &destination,
+                                   ASTNode tree) {
+  auto info = resolve(type, tree);
+  auto destinationInfo = resolve(destination, tree);
+  if (!info.isNumeric() || !destinationInfo.isNumeric() ||
+      info.canonical == destinationInfo.canonical) {
+    return type;
+  }
+  if (info.isInteger() && destinationInfo.isFloat()) {
+    return info.bits < 64 ? fixedTypeName(Kind::Integer, 64, true) : type;
+  }
+  if (implicitlyConvertible(type, destination, tree)) {
+    return destination;
+  }
+  return type;
+}
+
+bool DataTypes::untypedLiteralTakes(const ValueNode &literal,
+                                    const std::string &type, ASTNode tree) {
+  if (!literal.getLiteralSuffix().empty() ||
+      (literal.getNodeType() != AST::Int &&
+       literal.getNodeType() != AST::Real)) {
+    return false;
+  }
+  auto info = resolve(type, tree);
+  if (literal.getNodeType() == AST::Real) {
+    return info.isFloat();
+  }
+  return info.isNumeric() && literalFits(literal, info);
 }

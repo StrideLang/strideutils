@@ -169,12 +169,14 @@ private:
     case AST::Int: {
       auto *val = static_cast<ValueNode *>(node.get());
       rec.intVal = val->getIntValue();
+      rec.name = val->getLiteralSuffix();
       rec.domainId = visit(val->getDomain(), outNodes);
       break;
     }
     case AST::Real: {
       auto *val = static_cast<ValueNode *>(node.get());
       rec.realVal = val->getRealValue();
+      rec.name = val->getLiteralSuffix();
       rec.domainId = visit(val->getDomain(), outNodes);
       break;
     }
@@ -324,13 +326,15 @@ bool reconstructGraph(const SerializedASTGraph &graph,
       created->setNamespaceList(rec.scope);
       break;
     }
-    case AST::Int: {
-      created = std::make_shared<ValueNode>(rec.intVal, fname, line);
-      created->setNamespaceList(rec.scope);
-      break;
-    }
+    case AST::Int:
     case AST::Real: {
-      created = std::make_shared<ValueNode>(rec.realVal, fname, line);
+      // name holds the literal's type suffix, e.g. "u8"
+      auto value =
+          tok == AST::Int
+              ? std::make_shared<ValueNode>(rec.intVal, fname, line)
+              : std::make_shared<ValueNode>(rec.realVal, fname, line);
+      value->setLiteralSuffix(rec.name);
+      created = value;
       created->setNamespaceList(rec.scope);
       break;
     }

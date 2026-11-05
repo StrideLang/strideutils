@@ -80,6 +80,35 @@ TEST(ASTSerializerTests, EnvelopeHeaderIs64Bytes) {
   EXPECT_FALSE(header.hasValidMagic());
 }
 
+TEST(ASTSerializerTests, RoundTripLiteralSuffixes) {
+  auto serializer = ASTSerializerFactory::createDefault();
+  ASSERT_NE(serializer, nullptr);
+
+  auto root = std::make_shared<AST>(AST::None, "test.stride", 1);
+  auto byte = std::make_shared<ValueNode>(int64_t(255), "test.stride", 2);
+  byte->setLiteralSuffix("u8");
+  root->addChild(byte);
+  auto single = std::make_shared<ValueNode>(0.5, "test.stride", 3);
+  single->setLiteralSuffix("f32");
+  root->addChild(single);
+  root->addChild(std::make_shared<ValueNode>(int64_t(7), "test.stride", 4));
+
+  std::vector<std::byte> bytes;
+  ASSERT_TRUE(serializer->serializeToBytes(root, bytes));
+  ASTNode loaded;
+  ASSERT_TRUE(serializer->deserializeFromBytes(bytes, loaded));
+  ASSERT_EQ(loaded->getChildren().size(), 3u);
+
+  auto value = [&](size_t index) {
+    return std::static_pointer_cast<ValueNode>(loaded->getChildren().at(index));
+  };
+  EXPECT_EQ(value(0)->getIntValue(), 255);
+  EXPECT_EQ(value(0)->getLiteralSuffix(), "u8");
+  EXPECT_DOUBLE_EQ(value(1)->getRealValue(), 0.5);
+  EXPECT_EQ(value(1)->getLiteralSuffix(), "f32");
+  EXPECT_EQ(value(2)->getLiteralSuffix(), "");
+}
+
 TEST(ASTSerializerTests, RoundTripAllNodeTypesAndCyclicCompilerProperties) {
   auto serializer = ASTSerializerFactory::createDefault();
   ASSERT_NE(serializer, nullptr);

@@ -335,6 +335,29 @@ std::string promotionRisk(const std::string &a, const std::string &b,
 // losing range: integer to float, and integer or float widening.
 bool implicitlyConvertible(const std::string &from, const std::string &to,
                            ASTNode tree = nullptr);
+
+// The data type of a numeric literal: the type its suffix names (255u8 is
+// UInt8), or Int or Real for literals without a suffix.
+std::string literalType(const ValueNode &literal);
+
+// Whether the value of a numeric literal is kept exactly by type to. Every
+// literal fits a float type: it is written for the type it goes to.
+bool literalFits(const ValueNode &literal, const Info &to);
+
+// Whether a literal without a suffix takes type when used with a value of
+// that type, e.g. the 1 in UInt8Signal + 1 is a UInt8. Integer literals take
+// the numeric types that hold their value, real literals the float types.
+bool untypedLiteralTakes(const ValueNode &literal, const std::string &type,
+                         ASTNode tree = nullptr);
+
+// The type to compute an expression of type in when its result goes to
+// destination, so that it doesn't overflow or lose precision before it is
+// converted: the destination when it holds every value of type (UInt8Signal
+// * 2 streamed to an Int32 is computed in Int32), and Int64 for integer math
+// streamed to a float, which keeps integer division. Otherwise type.
+std::string widenedType(const std::string &type,
+                        const std::string &destination,
+                        ASTNode tree = nullptr);
 } // namespace DataTypes
 } // namespace strd
 
