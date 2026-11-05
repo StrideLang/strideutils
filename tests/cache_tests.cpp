@@ -40,6 +40,8 @@ public:
     m_testDir = base;
     m_cacheDir = base / ".strdcache_custom";
     std::filesystem::create_directories(m_testDir);
+    // Tests of the cache run it even when built with uncommitted changes
+    CacheManager::setExperimentalCompilerOverride(0);
     m_prevEnabled = CacheManager::instance().isEnabled();
     m_prevForceRecompile = CacheManager::instance().isForceRecompile();
     m_prevCacheDir = CacheManager::instance().getCacheDirectory();
@@ -53,6 +55,7 @@ public:
     CacheManager::instance().setCacheDirectory(m_prevCacheDir);
     CacheManager::instance().setForceRecompile(m_prevForceRecompile);
     CacheManager::instance().setEnabled(m_prevEnabled);
+    CacheManager::setExperimentalCompilerOverride(-1);
     CacheManager::instance().setSerializer(
         ASTSerializerFactory::createDefault());
     std::error_code ec;
@@ -258,6 +261,32 @@ TEST(ASTSerializerTests, RoundTripAllNodeTypesAndCyclicCompilerProperties) {
   // Verify cyclic compiler properties are preserved!
   EXPECT_EQ(restFunc->getCompilerProperty("mainInput").get(), restLeft.get());
   EXPECT_EQ(restLeft->getCompilerProperty("mainOutput").get(), restFunc.get());
+}
+
+TEST(CacheManagerTests, ExperimentalCompilerNeverUsesCache) {
+  ScopedCacheDir scoped;
+  auto strideFile = scoped.testDir() / "Sample.stride";
+  {
+    std::ofstream out(strideFile);
+    out << "signal X { default: 10 }\n";
+  }
+  auto parsed = AST::parseFile(strideFile.string().c_str());
+  ASSERT_NE(parsed, nullptr);
+  ASSERT_TRUE(CacheManager::instance().saveCachedAST(strideFile, parsed));
+
+  // Built from sources with uncommitted changes: the cache written by the
+  // committed compiler is neither read nor written
+  CacheManager::setExperimentalCompilerOverride(1);
+  EXPECT_TRUE(CacheManager::isExperimentalCompiler());
+  EXPECT_FALSE(CacheManager::instance().isEnabled());
+  CacheManager::instance().setEnabled(true);
+  EXPECT_FALSE(CacheManager::instance().isEnabled());
+  EXPECT_EQ(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  EXPECT_FALSE(CacheManager::instance().saveCachedAST(strideFile, parsed));
+
+  CacheManager::setExperimentalCompilerOverride(0);
+  EXPECT_TRUE(CacheManager::instance().isEnabled());
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
 }
 
 TEST(CacheManagerTests, HitMissAndInvalidationOnFileChange) {

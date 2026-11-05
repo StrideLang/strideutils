@@ -3,6 +3,7 @@
 */
 
 #include "stride/utils/cachemanager.h"
+#include "stride/utils/compilerversion.h" // Generated at build time
 #include "stride/parser/valuenode.h"
 #include "stride/utils/logger.h"
 
@@ -56,6 +57,11 @@ CacheManager &CacheManager::instance() {
 
 CacheManager::CacheManager()
     : m_serializer(ASTSerializerFactory::createDefault()) {
+  if (isExperimentalCompiler()) {
+    LOG_INFO() << "[CacheManager] Experimental compiler (uncommitted changes "
+                  "in " STRIDE_COMPILER_MODIFIED_SOURCES "): caching disabled"
+               << std::endl;
+  }
   if (const char *noCache = std::getenv("STRIDE_NO_CACHE")) {
     std::string val(noCache);
     if (val == "1" || val == "true" || val == "TRUE" || val == "on") {
@@ -86,7 +92,7 @@ void CacheManager::setEnabled(bool enabled) noexcept {
 
 bool CacheManager::isEnabled() const noexcept {
   std::lock_guard<std::mutex> lock(m_mutex);
-  return m_enabled;
+  return m_enabled && !isExperimentalCompiler();
 }
 
 void CacheManager::setForceRecompile(bool force) noexcept {
@@ -176,14 +182,25 @@ uint64_t CacheManager::getFileSize(const std::filesystem::path &filePath) {
 
 namespace {
 std::atomic<uint64_t> s_compilerBuildHashOverride{0};
+std::atomic<int> s_experimentalCompilerOverride{-1};
 } // namespace
 
 const char *CacheManager::getCompilerCommitHash() noexcept {
-#ifdef STRIDE_GIT_COMMIT_HASH
   return STRIDE_GIT_COMMIT_HASH;
-#else
-  return "unknown";
-#endif
+}
+
+bool CacheManager::isExperimentalCompiler() noexcept {
+  int experimental =
+      s_experimentalCompilerOverride.load(std::memory_order_relaxed);
+  if (experimental >= 0) {
+    return experimental != 0;
+  }
+  return STRIDE_COMPILER_EXPERIMENTAL != 0;
+}
+
+void CacheManager::setExperimentalCompilerOverride(int experimental) noexcept {
+  s_experimentalCompilerOverride.store(experimental,
+                                       std::memory_order_relaxed);
 }
 
 void CacheManager::setCompilerBuildHashOverride(uint64_t hashOverride) noexcept {

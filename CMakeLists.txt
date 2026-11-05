@@ -34,17 +34,40 @@ target_include_directories(StrideUtils PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include
 
 target_link_libraries(StrideUtils PUBLIC StrideParser)
 
-execute_process(
-  COMMAND git rev-parse --short HEAD
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  OUTPUT_VARIABLE STRIDE_GIT_COMMIT_HASH
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  ERROR_QUIET
-)
-if(NOT STRIDE_GIT_COMMIT_HASH)
-  set(STRIDE_GIT_COMMIT_HASH "unknown")
+# The compiler is identified to the cache by the commits of its sources, and
+# is experimental (never uses the cache) while they have uncommitted changes.
+# The sibling repositories default to the layout of the Stride submodules.
+set(STRIDE_COMPILER_SOURCE_DIRS "" CACHE STRING
+    "Git work trees of the compiler's sources, for the cache's compiler hash")
+if(NOT STRIDE_COMPILER_SOURCE_DIRS)
+  set(compilerSourceDirs "${CMAKE_CURRENT_SOURCE_DIR}")
+  foreach(sibling strideparser stridegen stridejit)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../${sibling}/.git")
+      get_filename_component(siblingDir
+        "${CMAKE_CURRENT_SOURCE_DIR}/../${sibling}" ABSOLUTE)
+      list(APPEND compilerSourceDirs "${siblingDir}")
+    endif()
+  endforeach()
+else()
+  set(compilerSourceDirs "${STRIDE_COMPILER_SOURCE_DIRS}")
 endif()
 
-target_compile_definitions(StrideUtils PRIVATE STRIDE_GIT_COMMIT_HASH="${STRIDE_GIT_COMMIT_HASH}")
+set(compilerVersionHeader
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/stride/utils/compilerversion.h")
+# '|' separates the directories: a ';' doesn't survive the command line
+string(REPLACE ";" "|" compilerSourceDirsArg "${compilerSourceDirs}")
+# Runs on every build: git status can change without CMake knowing
+add_custom_target(StrideCompilerVersion
+  COMMAND ${CMAKE_COMMAND}
+    "-DSOURCE_DIRS=${compilerSourceDirsArg}"
+    "-DOUTPUT=${compilerVersionHeader}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StrideCompilerVersion.cmake"
+  BYPRODUCTS "${compilerVersionHeader}"
+  COMMENT "Checking the Stride compiler sources for changes"
+  VERBATIM
+)
+add_dependencies(StrideUtils StrideCompilerVersion)
+target_include_directories(StrideUtils PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 add_subdirectory(tests)

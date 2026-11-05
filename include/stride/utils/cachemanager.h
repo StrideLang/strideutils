@@ -36,6 +36,7 @@ public:
   ~CacheManager() = default;
 
   void setEnabled(bool enabled) noexcept;
+  // False for an experimental compiler, whatever setEnabled() was given
   bool isEnabled() const noexcept;
 
   void setForceRecompile(bool force) noexcept;
@@ -113,7 +114,16 @@ public:
   static uint64_t hashFile(const std::filesystem::path &filePath);
   static uint64_t getFileMtime(const std::filesystem::path &filePath);
   static uint64_t getFileSize(const std::filesystem::path &filePath);
+  // The commits of the compiler's sources, e.g. "strideutils:9beca65
+  // stridejit:5d26dd5"
   static const char *getCompilerCommitHash() noexcept;
+  // Whether the compiler was built from sources with uncommitted changes.
+  // An experimental compiler never reads or writes the cache: its output can
+  // differ from that of the commits that identify it.
+  static bool isExperimentalCompiler() noexcept;
+  // For tests: 1 or 0 decides isExperimentalCompiler(), -1 goes back to the
+  // state of the sources at build time
+  static void setExperimentalCompilerOverride(int experimental) noexcept;
   static uint64_t getCompilerBuildHash() noexcept;
   static void setCompilerBuildHashOverride(uint64_t hashOverride) noexcept;
   static void clearCompilerBuildHashOverride() noexcept;
