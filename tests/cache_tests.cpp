@@ -404,6 +404,44 @@ TEST(CacheManagerTests, DirectoryCachingInLoadAllInDirectory) {
   EXPECT_GE(CacheManager::instance().getStats().invalidations, 1u);
 }
 
+// A library folder as a dependency (the JIT passes its include folders): a
+// library file written in place invalidates, although the folder's own time
+// does not change
+TEST(CacheManagerTests, LibraryFileEditedInPlaceInvalidatesCache) {
+  ScopedCacheDir scoped;
+  auto gameFile = scoped.testDir() / "game.stride";
+  auto libraryDir = scoped.testDir() / "games";
+  auto libraryFile = libraryDir / "Library.stride";
+  std::filesystem::create_directories(libraryDir);
+  {
+    std::ofstream out(gameFile);
+    out << "import Library\n";
+  }
+  {
+    std::ofstream out(libraryFile);
+    out << "constant Steps { value: 1 }\n";
+  }
+  const std::vector<uint8_t> object = {1, 2, 3, 4};
+  ASSERT_TRUE(CacheManager::instance().saveCachedBinary(
+      gameFile, object.data(), object.size(), {libraryDir}, "obj", ".obj"));
+  std::vector<uint8_t> loaded;
+  ASSERT_TRUE(CacheManager::instance().loadCachedBinary(
+      gameFile, loaded, {libraryDir}, "obj", ".obj"));
+
+  // Same size, written in place; the folder keeps its time
+  const auto folderTime = std::filesystem::last_write_time(libraryDir);
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  {
+    std::ofstream out(libraryFile, std::ios::in | std::ios::out);
+    out << "constant Steps { value: 2 }\n";
+  }
+  std::filesystem::last_write_time(libraryDir, folderTime);
+  ASSERT_EQ(std::filesystem::last_write_time(libraryDir), folderTime);
+
+  EXPECT_FALSE(CacheManager::instance().loadCachedBinary(
+      gameFile, loaded, {libraryDir}, "obj", ".obj"));
+}
+
 TEST(CacheManagerTests, BinaryPayloadCachingObjAndBitcode) {
   ScopedCacheDir scoped;
   auto sourceFile = scoped.testDir() / "Game.stride";

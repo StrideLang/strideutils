@@ -128,6 +128,11 @@ public:
   static void setCompilerBuildHashOverride(uint64_t hashOverride) noexcept;
   static void clearCompilerBuildHashOverride() noexcept;
 
+  // What a cached entry's key takes from one of its dependencies: a file's
+  // time and size, or for a directory (the folders a program imports
+  // libraries from) the fingerprint of its library files
+  static uint64_t dependencyHash(const std::filesystem::path &dependency);
+
   // Compute composite fingerprint of all .stride files in a directory
   static bool computeDirectoryFingerprint(const std::filesystem::path &dirPath,
                                           uint64_t &outAggregateMtime,

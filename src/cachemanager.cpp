@@ -226,6 +226,21 @@ uint64_t CacheManager::getCompilerBuildHash() noexcept {
   return kBuildHash;
 }
 
+uint64_t CacheManager::dependencyHash(const std::filesystem::path &dep) {
+  std::error_code ec;
+  if (std::filesystem::is_directory(dep, ec)) {
+    // A directory's own time changes when a file in it is created, deleted
+    // or renamed, not when one is written in place, so each library file
+    // counts by its name, time and size
+    uint64_t mtime = 0, size = 0, hash = 0;
+    if (!computeDirectoryFingerprint(dep, mtime, size, hash)) {
+      return 0;
+    }
+    return combineHash(combineHash(mtime, size), hash);
+  }
+  return combineHash(getFileMtime(dep), getFileSize(dep));
+}
+
 bool CacheManager::computeDirectoryFingerprint(
     const std::filesystem::path &dirPath, uint64_t &outAggregateMtime,
     uint64_t &outAggregateSize, uint64_t &outAggregateHash) {
@@ -466,8 +481,7 @@ bool CacheManager::loadCachedBinary(
   } else if (header.sourceSize == curSize) {
     uint64_t contentHash = hashFile(sourceFile);
     for (const auto &dep : dependencies) {
-      contentHash = combineHash(contentHash, getFileMtime(dep));
-      contentHash = combineHash(contentHash, getFileSize(dep));
+      contentHash = combineHash(contentHash, dependencyHash(dep));
     }
     if (contentHash != 0 && contentHash == header.sourceContentHash) {
       fresh = true;
@@ -522,8 +536,7 @@ bool CacheManager::saveCachedBinary(
 
   uint64_t contentHash = hashFile(sourceFile);
   for (const auto &dep : dependencies) {
-    contentHash = combineHash(contentHash, getFileMtime(dep));
-    contentHash = combineHash(contentHash, getFileSize(dep));
+    contentHash = combineHash(contentHash, dependencyHash(dep));
   }
 
   CacheEnvelopeHeader header{};
@@ -633,8 +646,7 @@ ASTNode CacheManager::loadCachedAST(
     // Safe fallback path: check content hash + dependencies
     uint64_t contentHash = hashFile(sourceFile);
     for (const auto &dep : dependencies) {
-      contentHash = combineHash(contentHash, getFileMtime(dep));
-      contentHash = combineHash(contentHash, getFileSize(dep));
+      contentHash = combineHash(contentHash, dependencyHash(dep));
     }
     if (contentHash != 0 && contentHash == header.sourceContentHash) {
       fresh = true;
@@ -709,8 +721,7 @@ bool CacheManager::saveCachedAST(
 
   uint64_t contentHash = hashFile(sourceFile);
   for (const auto &dep : dependencies) {
-    contentHash = combineHash(contentHash, getFileMtime(dep));
-    contentHash = combineHash(contentHash, getFileSize(dep));
+    contentHash = combineHash(contentHash, dependencyHash(dep));
   }
 
   CacheEnvelopeHeader header{};

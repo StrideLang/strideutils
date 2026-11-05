@@ -791,7 +791,15 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
         }
 
       } else if (exp->getNodeType() == AST::MemberAccess) {
-        return -2; // FIXME calculate actual size from external connection
+        // An array's size (Squares.size) is known now; a port's size
+        // (OutputPort.size) comes from the call's connection
+        std::vector<LangError> memberErrors;
+        const int64_t memberSize =
+            ASTFunctions::evaluateConstInteger(exp, scope, tree, &memberErrors);
+        if (!memberErrors.empty()) {
+          return -2;
+        }
+        size += static_cast<int>(memberSize);
       } else {
         std::vector<LangError> internalErrors;
         size += ASTFunctions::evaluateConstInteger(exp, scope, tree,

@@ -1126,6 +1126,19 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
         static_cast<MemberAccessNode *>(value.get());
     std::shared_ptr<DeclarationNode> entityDecl =
         ASTQuery::findDeclarationByName(propertyNode->getEntity(), scope, tree);
+    // The size of a declared array (Squares.size) is a constant
+    if (entityDecl && entityDecl->getNodeType() == AST::ArrayDeclaration &&
+        propertyNode->getPropertyName() == "size") {
+      std::vector<LangError> sizeErrors;
+      const int64_t size =
+          evaluateConstInteger(value, scope, tree, &sizeErrors);
+      if (sizeErrors.empty()) {
+        auto sizeValue = std::make_shared<ValueNode>(
+            size, value->getFilename().c_str(), value->getLine());
+        sizeValue->setCompilerProperty("resolvedFrom", entityDecl);
+        return sizeValue;
+      }
+    }
     if (entityDecl &&
         ASTQuery::isPublicProperty(entityDecl, propertyNode->getPropertyName(),
                                    scope, tree)) {
@@ -1240,6 +1253,16 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
                                            ASTNode tree,
                                            std::vector<LangError> *errors) {
   int result = 0;
+  // No value to evaluate, such as an element of a constant that has none yet
+  // (one filled by a stream while compiling)
+  if (!node) {
+    if (errors) {
+      LangError error;
+      error.type = LangError::InvalidType;
+      errors->push_back(error);
+    }
+    return 0;
+  }
   if (node->getNodeType() == AST::Int) {
     return static_cast<ValueNode *>(node.get())->getIntValue();
   } else if (node->getNodeType() == AST::Array) {
@@ -1291,6 +1314,33 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
       error.type = LangError::InvalidType;
       error.lineNumber = node->getLine();
       error.errorTokens.push_back(nameNode->getName());
+      errors->push_back(error);
+    }
+    return 0;
+  } else if (node->getNodeType() == AST::MemberAccess) {
+    // The size of a declared array (Squares.size), known while compiling.
+    // A port's size (OutputPort.size) comes from what the call connects to,
+    // so it is not a constant here.
+    auto member = std::static_pointer_cast<MemberAccessNode>(node);
+    if (member->getPropertyName() == "size") {
+      auto declaration =
+          ASTQuery::findDeclarationByName(member->getEntity(), scope, tree);
+      if (declaration &&
+          declaration->getNodeType() == AST::ArrayDeclaration) {
+        std::vector<LangError> sizeErrors;
+        const int size = ASTQuery::getEntityDeclaredSize(declaration, scope,
+                                                         tree, &sizeErrors);
+        if (sizeErrors.empty() && size >= 0) {
+          return size;
+        }
+      }
+    }
+    if (errors) {
+      LangError error;
+      error.type = LangError::InvalidType;
+      error.lineNumber = node->getLine();
+      error.errorTokens.push_back(member->getEntity() + "." +
+                                  member->getPropertyName());
       errors->push_back(error);
     }
     return 0;
