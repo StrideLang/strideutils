@@ -34,6 +34,14 @@ target_include_directories(StrideUtils PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include
 
 target_link_libraries(StrideUtils PUBLIC StrideParser)
 
+# Where strideroot is when STRIDEROOT is not set and none is installed next
+# to the program or in the user's folder (see getDefaultStrideRoot)
+set(STRIDEROOT_DEFAULT "" CACHE PATH "strideroot used when no other is found")
+if(STRIDEROOT_DEFAULT)
+  target_compile_definitions(StrideUtils PRIVATE
+                             STRIDEROOT_DEFAULT="${STRIDEROOT_DEFAULT}")
+endif()
+
 # The compiler is identified to the cache by the commits of its sources, and
 # is experimental (never uses the cache) while they have uncommitted changes.
 # The sibling repositories default to the layout of the Stride submodules.

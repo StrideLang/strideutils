@@ -19,25 +19,127 @@
 #include <unordered_map>
 #include <vector>
 
+#if defined(_WIN32)
+// Declared here: windows.h defines macros (ERROR, ...) that break the logger
+extern "C" __declspec(dllimport) unsigned long __stdcall GetModuleFileNameW(
+    void *module, wchar_t *filename, unsigned long size);
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 using namespace strd;
+
+namespace {
+// The folder of the running executable, or empty
+std::filesystem::path executableFolder() {
+#if defined(_WIN32)
+  std::wstring path(260, L'\0');
+  unsigned long size = 0;
+  // A full buffer means the path was cut: try a larger one
+  while ((size = GetModuleFileNameW(nullptr, path.data(),
+                                    static_cast<unsigned long>(path.size()))) ==
+             path.size() &&
+         path.size() < 32768) {
+    path.resize(path.size() * 2);
+  }
+  path.resize(size);
+  return size ? std::filesystem::path(path).parent_path()
+              : std::filesystem::path();
+#elif defined(__APPLE__)
+  uint32_t size = 0;
+  _NSGetExecutablePath(nullptr, &size);
+  std::string path(size, '\0');
+  if (_NSGetExecutablePath(path.data(), &size) != 0) {
+    return {};
+  }
+  std::error_code ec;
+  auto resolved = std::filesystem::canonical(path.c_str(), ec);
+  return ec ? std::filesystem::path() : resolved.parent_path();
+#else
+  std::error_code ec;
+  auto resolved = std::filesystem::read_symlink("/proc/self/exe", ec);
+  return ec ? std::filesystem::path() : resolved.parent_path();
+#endif
+}
+
+// Where each user keeps it when it is installed apart from the program
+std::filesystem::path userFolder() {
+  auto env = [](const char *name) -> std::string {
+    const char *value = getenv(name);
+    return value ? value : "";
+  };
+#if defined(_WIN32)
+  const std::string base = env("LOCALAPPDATA");
+  return base.empty() ? std::filesystem::path()
+                      : std::filesystem::path(base) / "Stride" / "strideroot";
+#elif defined(__APPLE__)
+  const std::string home = env("HOME");
+  return home.empty() ? std::filesystem::path()
+                      : std::filesystem::path(home) / "Library" /
+                            "Application Support" / "Stride" / "strideroot";
+#else
+  const std::string data = env("XDG_DATA_HOME");
+  if (!data.empty()) {
+    return std::filesystem::path(data) / "stride" / "strideroot";
+  }
+  const std::string home = env("HOME");
+  return home.empty() ? std::filesystem::path()
+                      : std::filesystem::path(home) / ".local" / "share" /
+                            "stride" / "strideroot";
+#endif
+}
+
+bool isStrideRoot(const std::filesystem::path &path) {
+  std::error_code ec;
+  return !path.empty() &&
+         std::filesystem::is_directory(path / "library", ec);
+}
+
+std::string findStrideRoot() {
+  std::vector<std::filesystem::path> candidates;
+  // Next to the program, as an installed or packaged program has it
+  const auto exe = executableFolder();
+  if (!exe.empty()) {
+    candidates.push_back(exe / "strideroot");
+    candidates.push_back(exe / ".." / "share" / "stride" / "strideroot");
+  }
+  candidates.push_back(userFolder());
+#ifdef STRIDEROOT_DEFAULT
+  // The checkout the program was built with (set when configuring)
+  candidates.push_back(STRIDEROOT_DEFAULT);
+#endif
+  // Beside the repositories, from where tests are run
+  std::error_code ec;
+  candidates.push_back(std::filesystem::current_path(ec) / ".." / ".." /
+                       ".." / "Stride" / "strideroot");
+
+  for (const auto &candidate : candidates) {
+    if (isStrideRoot(candidate)) {
+      auto found = std::filesystem::canonical(candidate, ec);
+      return (ec ? candidate : found).string();
+    }
+  }
+  std::string tried;
+  for (const auto &candidate : candidates) {
+    if (!candidate.empty()) {
+      tried += "\n    " + candidate.string();
+    }
+  }
+  LOG_ERROR() << "Can't find strideroot: set STRIDEROOT to its folder, or "
+                 "put it in one of these places:"
+              << tried << std::endl;
+  return std::string();
+}
+} // namespace
 
 std::string ASTFunctions::getDefaultStrideRoot() {
   auto strideroot = getenv("STRIDEROOT");
   if (strideroot) {
     return std::string(strideroot);
-  } else {
-    std::filesystem::path abspath;
-    try {
-      abspath = std::filesystem::canonical(
-          std::filesystem::absolute(std::filesystem::current_path().string() +
-                                    "/../../../Stride/strideroot"));
-      //    LOG_INFO() << abspath.string() << std::endl;
-    } catch (...) {
-      LOG_ERROR() << "ERROR: Can't find strideroot and STRIDEROOT not set."
-                  << std::endl;
-    }
-    return abspath.string();
   }
+  // Looked for once: the places do not change while the program runs
+  static const std::string found = findStrideRoot();
+  return found;
 }
 
 void ASTFunctions::insertRequiredObjects(
