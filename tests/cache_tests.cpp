@@ -41,7 +41,7 @@ public:
     m_cacheDir = base / ".strdcache_custom";
     std::filesystem::create_directories(m_testDir);
     // Tests of the cache run it even when built with uncommitted changes
-    CacheManager::setExperimentalCompilerOverride(0);
+    CacheManager::TestAccess::setExperimentalCompilerOverride(0);
     m_prevEnabled = CacheManager::instance().isEnabled();
     m_prevForceRecompile = CacheManager::instance().isForceRecompile();
     m_prevCacheDir = CacheManager::instance().getCacheDirectory();
@@ -55,7 +55,7 @@ public:
     CacheManager::instance().setCacheDirectory(m_prevCacheDir);
     CacheManager::instance().setForceRecompile(m_prevForceRecompile);
     CacheManager::instance().setEnabled(m_prevEnabled);
-    CacheManager::setExperimentalCompilerOverride(-1);
+    CacheManager::TestAccess::setExperimentalCompilerOverride(-1);
     CacheManager::instance().setSerializer(
         ASTSerializerFactory::createDefault());
     std::error_code ec;
@@ -276,7 +276,7 @@ TEST(CacheManagerTests, ExperimentalCompilerNeverUsesCache) {
 
   // Built from sources with uncommitted changes: the cache written by the
   // committed compiler is neither read nor written
-  CacheManager::setExperimentalCompilerOverride(1);
+  CacheManager::TestAccess::setExperimentalCompilerOverride(1);
   EXPECT_TRUE(CacheManager::isExperimentalCompiler());
   EXPECT_FALSE(CacheManager::instance().isEnabled());
   CacheManager::instance().setEnabled(true);
@@ -284,7 +284,7 @@ TEST(CacheManagerTests, ExperimentalCompilerNeverUsesCache) {
   EXPECT_EQ(CacheManager::instance().loadCachedAST(strideFile), nullptr);
   EXPECT_FALSE(CacheManager::instance().saveCachedAST(strideFile, parsed));
 
-  CacheManager::setExperimentalCompilerOverride(0);
+  CacheManager::TestAccess::setExperimentalCompilerOverride(0);
   EXPECT_TRUE(CacheManager::instance().isEnabled());
   EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
 }
@@ -584,7 +584,7 @@ TEST(CacheManagerTests, CompilerCommitAndBuildHashInvalidation) {
 
   // 3. Simulate a compiler binary / commit hash change using hash override
   uint64_t simulatedNewCommitHash = initialBuildHash ^ 0xDEADBEEFCAFEBABEULL;
-  CacheManager::setCompilerBuildHashOverride(simulatedNewCommitHash);
+  CacheManager::TestAccess::setCompilerBuildHashOverride(simulatedNewCommitHash);
   EXPECT_EQ(CacheManager::getCompilerBuildHash(), simulatedNewCommitHash);
 
   // Both AST and binary cache must invalidate due to compiler build hash mismatch!
@@ -593,7 +593,7 @@ TEST(CacheManagerTests, CompilerCommitAndBuildHashInvalidation) {
   EXPECT_FALSE(CacheManager::instance().loadCachedBinary(strideFile, rejectedObj, {}, "", ".obj"));
 
   // 4. Restore original hash
-  CacheManager::clearCompilerBuildHashOverride();
+  CacheManager::TestAccess::clearCompilerBuildHashOverride();
   EXPECT_EQ(CacheManager::getCompilerBuildHash(), initialBuildHash);
 
   // Both hit again
@@ -603,3 +603,249 @@ TEST(CacheManagerTests, CompilerCommitAndBuildHashInvalidation) {
   EXPECT_EQ(restoredObj, fakeObj);
 }
 
+TEST(CacheManagerTests, MultiVersionCoexistenceNoThrashing) {
+  ScopedCacheDir scoped;
+  auto strideFile = scoped.testDir() / "Coexist.stride";
+
+  {
+    std::ofstream out(strideFile);
+    out << "signal Counter { default: 10 }\n";
+  }
+
+  uint64_t hashV1 = 0x1111222233334444ULL;
+  uint64_t hashV2 = 0x5555666677778888ULL;
+
+  // 1. Compile & save under Version 1
+  CacheManager::TestAccess::setCompilerBuildHashOverride(hashV1);
+  auto parsedV1 = AST::parseFile(strideFile.string().c_str());
+  ASSERT_NE(parsedV1, nullptr);
+  EXPECT_TRUE(CacheManager::instance().saveCachedAST(strideFile, parsedV1));
+
+  std::vector<uint8_t> objV1 = {'V', '1', 'O', 'B', 'J'};
+  EXPECT_TRUE(CacheManager::instance().saveCachedBinary(
+      strideFile, objV1.data(), objV1.size(), {}, "", ".obj"));
+
+  // Verify hit on V1
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> loadedV1;
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(strideFile, loadedV1, {}, "", ".obj"));
+  EXPECT_EQ(loadedV1, objV1);
+
+  // 2. Switch to Version 2: save different AST & binary
+  CacheManager::TestAccess::setCompilerBuildHashOverride(hashV2);
+  // V2 sees a cache miss (its partition is fresh)
+  EXPECT_EQ(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+
+  auto parsedV2 = AST::parseFile(strideFile.string().c_str());
+  ASSERT_NE(parsedV2, nullptr);
+  EXPECT_TRUE(CacheManager::instance().saveCachedAST(strideFile, parsedV2));
+
+  std::vector<uint8_t> objV2 = {'V', '2', 'O', 'B', 'J'};
+  EXPECT_TRUE(CacheManager::instance().saveCachedBinary(
+      strideFile, objV2.data(), objV2.size(), {}, "", ".obj"));
+
+  // Verify hit on V2
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> loadedV2;
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(strideFile, loadedV2, {}, "", ".obj"));
+  EXPECT_EQ(loadedV2, objV2);
+
+  // 3. Switch BACK to Version 1: verify V1 cache is intact and not clobbered!
+  CacheManager::TestAccess::setCompilerBuildHashOverride(hashV1);
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> restoredV1;
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(strideFile, restoredV1, {}, "", ".obj"));
+  EXPECT_EQ(restoredV1, objV1);
+
+  // 4. Switch back to Version 2: verify V2 is also intact!
+  CacheManager::TestAccess::setCompilerBuildHashOverride(hashV2);
+  EXPECT_NE(CacheManager::instance().loadCachedAST(strideFile), nullptr);
+  std::vector<uint8_t> restoredV2;
+  EXPECT_TRUE(CacheManager::instance().loadCachedBinary(strideFile, restoredV2, {}, "", ".obj"));
+  EXPECT_EQ(restoredV2, objV2);
+
+  CacheManager::TestAccess::clearCompilerBuildHashOverride();
+}
+
+TEST(CacheManagerTests, CachePruneQuotaAndLRUEviction) {
+  ScopedCacheDir scoped;
+
+  auto cacheDir = CacheManager::instance().resolveCacheDirForSource(scoped.testDir());
+  auto fileOld = cacheDir / "Old.stride.scache";
+  auto fileMid = cacheDir / "Mid.stride.scache";
+  auto fileNew = cacheDir / "New.stride.scache";
+
+  std::vector<uint8_t> payload50KB(50 * 1024, 0xAA);
+  {
+    std::ofstream outOld(fileOld, std::ios::binary);
+    outOld.write(reinterpret_cast<const char *>(payload50KB.data()), payload50KB.size());
+  }
+  {
+    std::ofstream outMid(fileMid, std::ios::binary);
+    outMid.write(reinterpret_cast<const char *>(payload50KB.data()), payload50KB.size());
+  }
+  {
+    std::ofstream outNew(fileNew, std::ios::binary);
+    outNew.write(reinterpret_cast<const char *>(payload50KB.data()), payload50KB.size());
+  }
+
+  auto now = std::filesystem::file_time_type::clock::now();
+  std::filesystem::last_write_time(fileOld, now - std::chrono::hours(10));
+  std::filesystem::last_write_time(fileMid, now - std::chrono::hours(5));
+  std::filesystem::last_write_time(fileNew, now - std::chrono::hours(1));
+
+  uint64_t usageBefore = CacheManager::instance().getCacheDiskUsage(scoped.cacheDir());
+  EXPECT_GE(usageBefore, 150 * 1024u);
+
+  CachePruneOptions opts;
+  opts.maxSizeBytes = 120 * 1024;
+  opts.pruneToFraction = 0.80;
+  opts.pruneOrphans = false;
+  opts.maxAge = std::chrono::hours(0);
+
+  auto stats = CacheManager::instance().pruneCache(opts, scoped.cacheDir());
+  EXPECT_EQ(stats.filesRemoved, 2u);
+  EXPECT_GE(stats.bytesReclaimed, 100 * 1024u);
+
+  EXPECT_FALSE(std::filesystem::exists(fileOld));
+  EXPECT_FALSE(std::filesystem::exists(fileMid));
+  EXPECT_TRUE(std::filesystem::exists(fileNew));
+}
+
+TEST(CacheManagerTests, CachePruneOrphans) {
+  ScopedCacheDir scoped;
+
+  auto liveSource = scoped.testDir() / "Live.stride";
+  auto orphanSource = scoped.testDir() / "Orphan.stride";
+  {
+    std::ofstream outLive(liveSource);
+    outLive << "signal Live { default: 1 }\n";
+    std::ofstream outOrphan(orphanSource);
+    outOrphan << "signal Orphan { default: 2 }\n";
+  }
+
+  auto liveAST = AST::parseFile(liveSource.string().c_str());
+  auto orphanAST = AST::parseFile(orphanSource.string().c_str());
+  ASSERT_TRUE(CacheManager::instance().saveCachedAST(liveSource, liveAST));
+  ASSERT_TRUE(CacheManager::instance().saveCachedAST(orphanSource, orphanAST));
+
+  auto liveCachePath = CacheManager::instance().getCacheFilePath(liveSource);
+  auto orphanCachePath = CacheManager::instance().getCacheFilePath(orphanSource);
+  ASSERT_TRUE(std::filesystem::exists(liveCachePath));
+  ASSERT_TRUE(std::filesystem::exists(orphanCachePath));
+
+  std::filesystem::remove(orphanSource);
+  ASSERT_FALSE(std::filesystem::exists(orphanSource));
+  ASSERT_TRUE(std::filesystem::exists(liveSource));
+
+  CachePruneOptions opts;
+  opts.maxSizeBytes = 0;
+  opts.maxAge = std::chrono::hours(0);
+  opts.pruneOrphans = true;
+
+  auto stats = CacheManager::instance().pruneCache(opts, scoped.cacheDir());
+  EXPECT_GE(stats.filesRemoved, 1u);
+
+  EXPECT_TRUE(std::filesystem::exists(liveCachePath));
+  EXPECT_FALSE(std::filesystem::exists(orphanCachePath));
+}
+
+TEST(CacheManagerTests, CachePruneStaleVersionPartitions) {
+  ScopedCacheDir scoped;
+
+  auto activePartition = scoped.cacheDir() / CacheManager::getCompilerVersionPartition();
+  auto stalePartition = scoped.cacheDir() / "b_9999888877776666";
+  std::filesystem::create_directories(activePartition);
+  std::filesystem::create_directories(stalePartition);
+
+  auto activeFile = activePartition / "Active.stride.scache";
+  auto staleFile = stalePartition / "Stale.stride.scache";
+  {
+    std::ofstream outA(activeFile);
+    outA << "active";
+    std::ofstream outS(staleFile);
+    outS << "stale";
+  }
+
+  CachePruneOptions opts;
+  opts.maxSizeBytes = 0;
+  opts.maxAge = std::chrono::hours(0);
+  opts.pruneOrphans = false;
+  opts.pruneStaleVersions = true;
+
+  auto stats = CacheManager::instance().pruneCache(opts, scoped.cacheDir());
+  EXPECT_GE(stats.directoriesRemoved, 1u);
+  EXPECT_GE(stats.filesRemoved, 1u);
+
+  EXPECT_TRUE(std::filesystem::exists(activePartition));
+  EXPECT_TRUE(std::filesystem::exists(activeFile));
+  EXPECT_FALSE(std::filesystem::exists(stalePartition));
+  EXPECT_FALSE(std::filesystem::exists(staleFile));
+}
+
+TEST(CacheManagerTests, CachePruneAgeEviction) {
+  ScopedCacheDir scoped;
+
+  auto cacheDir = CacheManager::instance().resolveCacheDirForSource(scoped.testDir());
+  auto oldFile = cacheDir / "OldAge.stride.scache";
+  auto freshFile = cacheDir / "FreshAge.stride.scache";
+
+  {
+    std::ofstream outOld(oldFile);
+    outOld << "old data";
+    std::ofstream outFresh(freshFile);
+    outFresh << "fresh data";
+  }
+
+  auto now = std::filesystem::file_time_type::clock::now();
+  std::filesystem::last_write_time(oldFile, now - std::chrono::hours(48));
+  std::filesystem::last_write_time(freshFile, now - std::chrono::hours(1));
+
+  CachePruneOptions opts;
+  opts.maxSizeBytes = 0;
+  opts.maxAge = std::chrono::hours(24);
+  opts.pruneOrphans = false;
+  opts.pruneStaleVersions = false;
+
+  auto stats = CacheManager::instance().pruneCache(opts, scoped.cacheDir());
+  EXPECT_EQ(stats.filesRemoved, 1u);
+
+  EXPECT_FALSE(std::filesystem::exists(oldFile));
+  EXPECT_TRUE(std::filesystem::exists(freshFile));
+}
+
+TEST(CacheManagerTests, AutoPruneWriteThreshold) {
+  ScopedCacheDir scoped;
+
+  CacheManager::instance().setAutoPruneEnabled(true);
+  CacheManager::instance().setAutoPruneThreshold(2);
+  EXPECT_TRUE(CacheManager::instance().isAutoPruneEnabled());
+  EXPECT_EQ(CacheManager::instance().getAutoPruneThreshold(), 2u);
+
+  auto fileA = scoped.testDir() / "A.stride";
+  auto fileB = scoped.testDir() / "B.stride";
+  {
+    std::ofstream outA(fileA);
+    outA << "signal A { default: 1 }\n";
+    std::ofstream outB(fileB);
+    outB << "signal B { default: 2 }\n";
+  }
+
+  auto astA = AST::parseFile(fileA.string().c_str());
+  auto astB = AST::parseFile(fileB.string().c_str());
+
+  EXPECT_TRUE(CacheManager::instance().saveCachedAST(fileA, astA));
+  EXPECT_TRUE(CacheManager::instance().saveCachedAST(fileB, astB));
+
+  CacheManager::instance().setAutoPruneEnabled(false);
+}
+
+TEST(CacheManagerTests, CompilerVersionPartitionFormatting) {
+  uint64_t hash = 0x0123456789ABCDEFULL;
+  CacheManager::TestAccess::setCompilerBuildHashOverride(hash);
+
+  std::string defaultPartition = CacheManager::getCompilerVersionPartition();
+  EXPECT_EQ(defaultPartition, "b_0123456789abcdef");
+
+  CacheManager::TestAccess::clearCompilerBuildHashOverride();
+}

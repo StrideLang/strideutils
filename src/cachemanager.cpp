@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 
 namespace strd {
@@ -77,6 +78,12 @@ CacheManager::CacheManager()
   if (const char *envDir = std::getenv("STRIDE_CACHE_DIR")) {
     if (envDir[0] != '\0') {
       m_explicitCacheDir = std::filesystem::path(envDir);
+    }
+  }
+  if (const char *autoPrune = std::getenv("STRIDE_AUTO_PRUNE")) {
+    std::string val(autoPrune);
+    if (val == "1" || val == "true" || val == "TRUE" || val == "on") {
+      m_autoPruneEnabled = true;
     }
   }
 }
@@ -198,16 +205,16 @@ bool CacheManager::isExperimentalCompiler() noexcept {
   return STRIDE_COMPILER_EXPERIMENTAL != 0;
 }
 
-void CacheManager::setExperimentalCompilerOverride(int experimental) noexcept {
+void CacheManager::TestAccess::setExperimentalCompilerOverride(int experimental) noexcept {
   s_experimentalCompilerOverride.store(experimental,
                                        std::memory_order_relaxed);
 }
 
-void CacheManager::setCompilerBuildHashOverride(uint64_t hashOverride) noexcept {
+void CacheManager::TestAccess::setCompilerBuildHashOverride(uint64_t hashOverride) noexcept {
   s_compilerBuildHashOverride.store(hashOverride, std::memory_order_relaxed);
 }
 
-void CacheManager::clearCompilerBuildHashOverride() noexcept {
+void CacheManager::TestAccess::clearCompilerBuildHashOverride() noexcept {
   s_compilerBuildHashOverride.store(0, std::memory_order_relaxed);
 }
 
@@ -224,6 +231,24 @@ uint64_t CacheManager::getCompilerBuildHash() noexcept {
     return combineHash(h, 0x5354524443414348ULL);
   }();
   return kBuildHash;
+}
+
+std::string CacheManager::getCompilerVersionPartition() {
+  uint64_t buildHash = getCompilerBuildHash();
+  std::ostringstream ss;
+  if (const char *ver = std::getenv("STRIDE_VERSION")) {
+    if (ver[0] != '\0') {
+      ss << "v" << sanitizeTag(ver) << "_";
+    }
+  } else if (const char *cver = std::getenv("STRIDE_COMPILER_VERSION")) {
+    if (cver[0] != '\0') {
+      ss << "v" << sanitizeTag(cver) << "_";
+    }
+  } else {
+    ss << "b_";
+  }
+  ss << std::hex << std::setfill('0') << std::setw(16) << buildHash;
+  return ss.str();
 }
 
 uint64_t CacheManager::dependencyHash(const std::filesystem::path &dep) {
@@ -356,41 +381,41 @@ bool CacheManager::isDirectoryWritable(const std::filesystem::path &dir) {
 
 std::filesystem::path CacheManager::resolveCacheDirForSource(
     const std::filesystem::path &sourcePath) const {
-  std::filesystem::path explicitDir;
+  std::filesystem::path baseCacheDir;
   {
     std::lock_guard<std::mutex> lock(m_mutex);
-    explicitDir = m_explicitCacheDir;
+    baseCacheDir = m_explicitCacheDir;
   }
-  if (!explicitDir.empty()) {
+  if (baseCacheDir.empty()) {
     std::error_code ec;
-    std::filesystem::create_directories(explicitDir, ec);
-    return explicitDir;
+    std::filesystem::path absSource = std::filesystem::absolute(sourcePath, ec);
+    if (ec) {
+      absSource = sourcePath;
+    }
+
+    std::filesystem::path baseDir =
+        std::filesystem::is_directory(absSource, ec) ? absSource
+                                                     : absSource.parent_path();
+    if (baseDir.empty()) {
+      baseDir = std::filesystem::current_path(ec);
+    }
+
+    std::filesystem::path siblingCache = baseDir / kDefaultCacheFolderName;
+    if (isDirectoryWritable(siblingCache)) {
+      baseCacheDir = siblingCache;
+    } else {
+      uint64_t dirHash = hashString(baseDir.generic_string());
+      std::ostringstream hexHash;
+      hexHash << std::hex << dirHash;
+      baseCacheDir = getOsUserCacheDir() / hexHash.str();
+    }
   }
 
+  std::filesystem::path versionedDir =
+      baseCacheDir / getCompilerVersionPartition();
   std::error_code ec;
-  std::filesystem::path absSource = std::filesystem::absolute(sourcePath, ec);
-  if (ec) {
-    absSource = sourcePath;
-  }
-
-  std::filesystem::path baseDir =
-      std::filesystem::is_directory(absSource, ec) ? absSource
-                                                   : absSource.parent_path();
-  if (baseDir.empty()) {
-    baseDir = std::filesystem::current_path(ec);
-  }
-
-  std::filesystem::path siblingCache = baseDir / kDefaultCacheFolderName;
-  if (isDirectoryWritable(siblingCache)) {
-    return siblingCache;
-  }
-
-  uint64_t dirHash = hashString(baseDir.generic_string());
-  std::ostringstream hexHash;
-  hexHash << std::hex << dirHash;
-  std::filesystem::path fallbackDir = getOsUserCacheDir() / hexHash.str();
-  std::filesystem::create_directories(fallbackDir, ec);
-  return fallbackDir;
+  std::filesystem::create_directories(versionedDir, ec);
+  return versionedDir;
 }
 
 std::filesystem::path
@@ -584,6 +609,7 @@ bool CacheManager::saveCachedBinary(
     std::lock_guard<std::mutex> lock(m_mutex);
     m_stats.writes++;
   }
+  maybeAutoPrune(cacheFile);
   return true;
 }
 
@@ -770,8 +796,11 @@ bool CacheManager::saveCachedAST(
     }
   }
 
-  std::lock_guard<std::mutex> lock(m_mutex);
-  m_stats.writes++;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.writes++;
+  }
+  maybeAutoPrune(cacheFile);
   return true;
 }
 
@@ -917,8 +946,11 @@ bool CacheManager::saveCachedDirectory(const std::filesystem::path &dirPath,
     }
   }
 
-  std::lock_guard<std::mutex> lock(m_mutex);
-  m_stats.writes++;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stats.writes++;
+  }
+  maybeAutoPrune(cacheFile);
   return true;
 }
 
@@ -959,6 +991,266 @@ CacheStats CacheManager::getStats() const noexcept {
 void CacheManager::resetStats() noexcept {
   std::lock_guard<std::mutex> lock(m_mutex);
   m_stats = CacheStats{};
+}
+
+void CacheManager::setAutoPruneEnabled(bool enabled) noexcept {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  m_autoPruneEnabled = enabled;
+}
+
+bool CacheManager::isAutoPruneEnabled() const noexcept {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  return m_autoPruneEnabled;
+}
+
+void CacheManager::setAutoPruneThreshold(size_t writes) noexcept {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  m_autoPruneThreshold = writes;
+}
+
+size_t CacheManager::getAutoPruneThreshold() const noexcept {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  return m_autoPruneThreshold;
+}
+
+void CacheManager::maybeAutoPrune(const std::filesystem::path &cacheDir) {
+  bool enabled = false;
+  size_t threshold = 50;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    enabled = m_autoPruneEnabled;
+    threshold = m_autoPruneThreshold;
+  }
+  if (!enabled) {
+    return;
+  }
+  if (m_writesSincePrune.fetch_add(1, std::memory_order_relaxed) + 1 >= threshold) {
+    m_writesSincePrune.store(0, std::memory_order_relaxed);
+    CachePruneOptions opts;
+    if (const char *envMax = std::getenv("STRIDE_CACHE_MAX_BYTES")) {
+      try {
+        opts.maxSizeBytes = std::stoull(envMax);
+      } catch (...) {}
+    }
+    pruneCache(opts, cacheDir.parent_path().parent_path());
+  }
+}
+
+uint64_t CacheManager::getCacheDiskUsage(
+    const std::filesystem::path &targetCacheDir) const {
+  std::filesystem::path cacheRoot;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    cacheRoot = targetCacheDir.empty()
+                    ? (m_explicitCacheDir.empty() ? getOsUserCacheDir()
+                                                  : m_explicitCacheDir)
+                    : targetCacheDir;
+  }
+  std::error_code ec;
+  if (!std::filesystem::exists(cacheRoot, ec) ||
+      !std::filesystem::is_directory(cacheRoot, ec)) {
+    return 0;
+  }
+  uint64_t total = 0;
+  for (const auto &entry :
+       std::filesystem::recursive_directory_iterator(cacheRoot, ec)) {
+    if (entry.is_regular_file(ec)) {
+      total += entry.file_size(ec);
+    }
+  }
+  return total;
+}
+
+CachePruneStats CacheManager::pruneCache(
+    const CachePruneOptions &options,
+    const std::filesystem::path &targetCacheDir) {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  CachePruneStats stats{};
+
+  std::error_code ec;
+  std::filesystem::path cacheRoot = targetCacheDir;
+  if (cacheRoot.empty()) {
+    cacheRoot = m_explicitCacheDir.empty() ? getOsUserCacheDir() : m_explicitCacheDir;
+  } else if (std::filesystem::exists(cacheRoot / kDefaultCacheFolderName, ec)) {
+    cacheRoot = cacheRoot / kDefaultCacheFolderName;
+  }
+
+  if (!std::filesystem::exists(cacheRoot, ec) ||
+      !std::filesystem::is_directory(cacheRoot, ec)) {
+    return stats;
+  }
+
+  auto now = std::filesystem::file_time_type::clock::now();
+
+  // 1. Stale version partitions pruning
+  if (options.pruneStaleVersions) {
+    std::string activePartition = getCompilerVersionPartition();
+    std::vector<std::string> keepList = options.keepVersionPartitions;
+    if (keepList.empty()) {
+      keepList.push_back(activePartition);
+    }
+
+    std::vector<std::filesystem::path> versionDirsToRemove;
+    for (const auto &entry : std::filesystem::directory_iterator(cacheRoot, ec)) {
+      if (entry.is_directory(ec)) {
+        std::string dirName = entry.path().filename().string();
+        if (dirName.rfind("v", 0) == 0 || dirName.rfind("b_", 0) == 0) {
+          bool keep = false;
+          for (const auto &k : keepList) {
+            if (dirName == k) {
+              keep = true;
+              break;
+            }
+          }
+          if (!keep) {
+            versionDirsToRemove.push_back(entry.path());
+          }
+        }
+      }
+    }
+
+    for (const auto &vDir : versionDirsToRemove) {
+      uint64_t vSize = 0;
+      size_t vFiles = 0;
+      for (const auto &f : std::filesystem::recursive_directory_iterator(vDir, ec)) {
+        if (f.is_regular_file(ec)) {
+          vSize += f.file_size(ec);
+          vFiles++;
+        }
+      }
+      if (std::filesystem::remove_all(vDir, ec) > 0) {
+        stats.directoriesRemoved++;
+        stats.filesRemoved += vFiles;
+        stats.bytesReclaimed += vSize;
+      }
+    }
+  }
+
+  struct CacheFileInfo {
+    std::filesystem::path path;
+    uint64_t size{0};
+    std::filesystem::file_time_type mtime;
+  };
+
+  std::vector<CacheFileInfo> fileInfos;
+  std::vector<std::filesystem::path> filesToDelete;
+
+  for (const auto &entry : std::filesystem::recursive_directory_iterator(cacheRoot, ec)) {
+    if (entry.is_regular_file(ec)) {
+      auto fPath = entry.path();
+      std::string ext = fPath.extension().string();
+      if (ext == kCacheExtension || ext == ".obj" || ext == ".bc") {
+        uint64_t fSize = entry.file_size(ec);
+        auto fMtime = entry.last_write_time(ec);
+
+        // Check age
+        if (options.maxAge.count() > 0) {
+          auto age = std::chrono::duration_cast<std::chrono::hours>(now - fMtime);
+          if (age > options.maxAge) {
+            filesToDelete.push_back(fPath);
+            stats.filesRemoved++;
+            stats.bytesReclaimed += fSize;
+            continue;
+          }
+        }
+
+        // Check orphan if in sibling .strdcache or cacheRoot
+        if (options.pruneOrphans) {
+          std::filesystem::path current = fPath.parent_path();
+          std::filesystem::path projectDir;
+          while (!current.empty() && current != current.root_path()) {
+            if (current.filename() == kDefaultCacheFolderName || current == cacheRoot) {
+              projectDir = current.parent_path();
+              break;
+            }
+            current = current.parent_path();
+          }
+
+          if (!projectDir.empty()) {
+            std::string fname = fPath.filename().string();
+            std::string sourceItem;
+            size_t stridePos = fname.find(".stride");
+            if (stridePos != std::string::npos) {
+              sourceItem = fname.substr(0, stridePos + 7);
+            } else if (fname.rfind("_dir_", 0) == 0) {
+              size_t firstDot = fname.find('.');
+              if (firstDot != std::string::npos) {
+                sourceItem = fname.substr(5, firstDot - 5);
+              }
+            }
+
+            if (!sourceItem.empty()) {
+              std::error_code chkEc;
+              if (!std::filesystem::exists(projectDir / sourceItem, chkEc)) {
+                filesToDelete.push_back(fPath);
+                stats.filesRemoved++;
+                stats.bytesReclaimed += fSize;
+                continue;
+              }
+            }
+          }
+        }
+
+        fileInfos.push_back(CacheFileInfo{fPath, fSize, fMtime});
+      }
+    }
+  }
+
+  for (const auto &f : filesToDelete) {
+    std::filesystem::remove(f, ec);
+  }
+
+  // 3. LRU Quota eviction
+  if (options.maxSizeBytes > 0) {
+    uint64_t totalSize = 0;
+    for (const auto &info : fileInfos) {
+      totalSize += info.size;
+    }
+
+    if (totalSize > options.maxSizeBytes) {
+      std::sort(fileInfos.begin(), fileInfos.end(),
+                [](const CacheFileInfo &a, const CacheFileInfo &b) {
+                  return a.mtime < b.mtime;
+                });
+
+      uint64_t targetSize = static_cast<uint64_t>(
+          static_cast<double>(options.maxSizeBytes) * options.pruneToFraction);
+
+      for (const auto &info : fileInfos) {
+        if (totalSize <= targetSize) {
+          break;
+        }
+        if (std::filesystem::remove(info.path, ec)) {
+          stats.filesRemoved++;
+          stats.bytesReclaimed += info.size;
+          totalSize = (totalSize > info.size) ? (totalSize - info.size) : 0;
+        }
+      }
+    }
+  }
+
+  // 4. Clean up any empty directories
+  std::vector<std::filesystem::path> emptyDirs;
+  for (const auto &entry :
+       std::filesystem::recursive_directory_iterator(cacheRoot, ec)) {
+    if (entry.is_directory(ec)) {
+      emptyDirs.push_back(entry.path());
+    }
+  }
+  std::sort(emptyDirs.begin(), emptyDirs.end(),
+            [](const std::filesystem::path &a, const std::filesystem::path &b) {
+              return a.string().size() > b.string().size();
+            });
+  for (const auto &dir : emptyDirs) {
+    std::error_code emptyEc;
+    if (std::filesystem::is_empty(dir, emptyEc)) {
+      if (std::filesystem::remove(dir, emptyEc)) {
+        stats.directoriesRemoved++;
+      }
+    }
+  }
+
+  return stats;
 }
 
 } // namespace strd
