@@ -943,6 +943,17 @@ ASTQuery::getInheritedTypes(std::shared_ptr<DeclarationNode> entityTypeDecl,
   return inheritedTypes;
 }
 
+bool ASTQuery::isFinalType(std::shared_ptr<DeclarationNode> typeDecl) {
+  if (!typeDecl) {
+    return false;
+  }
+  auto finalProp = typeDecl->getPropertyValue("final");
+  if (finalProp && finalProp->getNodeType() == AST::Switch) {
+    return std::static_pointer_cast<ValueNode>(finalProp)->getSwitchValue();
+  }
+  return false;
+}
+
 std::vector<ASTNode>
 ASTQuery::getInheritedPorts(std::shared_ptr<DeclarationNode> entityDecl,
                             ScopeStack scope, ASTNode tree) {

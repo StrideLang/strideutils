@@ -798,6 +798,46 @@ bool ASTValidation::isValidListProperty(
   return true;
 }
 
+void ASTValidation::validateInheritance(
+    std::shared_ptr<DeclarationNode> decl, ScopeStack scopeStack,
+    std::vector<LangError> &errors, ASTNode tree,
+    std::string currentFramework) {
+  auto inheritsProp = decl->getPropertyValue("inherits");
+  if (!inheritsProp) {
+    return;
+  }
+  auto checkInherited = [&](const ASTNode &child) {
+    if (!child || child->getNodeType() != AST::Entity) {
+      return;
+    }
+    auto inheritsEntity = std::static_pointer_cast<EntityNode>(child);
+    std::string parentName = inheritsEntity->getName();
+    std::vector<std::string> namespaces = inheritsEntity->getNamespaceList();
+    auto parentDecl = ASTQuery::findDeclarationByName(
+        parentName, scopeStack, tree, namespaces, currentFramework);
+    if (!parentDecl) {
+      parentDecl = ASTQuery::findTypeDeclarationByName(
+          parentName, scopeStack, tree, namespaces, currentFramework);
+    }
+    if (parentDecl && ASTQuery::isFinalType(parentDecl)) {
+      LangError error;
+      error.type = LangError::InheritedFinalType;
+      child->copyLocationTo(error);
+      error.errorTokens.push_back(parentName);
+      error.errorTokens.push_back(decl->getName());
+      errors.push_back(error);
+    }
+  };
+
+  if (inheritsProp->getNodeType() == AST::List) {
+    for (const auto &elem : inheritsProp->getChildren()) {
+      checkInherited(elem);
+    }
+  } else if (inheritsProp->getNodeType() == AST::Entity) {
+    checkInherited(inheritsProp);
+  }
+}
+
 void ASTValidation::validateTypesForDeclaration(
     std::shared_ptr<DeclarationNode> decl, ScopeStack scopeStack,
     std::vector<LangError> &errors, ASTNode tree, std::string currentFramework,
@@ -841,6 +881,10 @@ void ASTValidation::validateTypesForDeclaration(
     }
     auto typeProperties =
         ASTQuery::getPortsForTypeEntity(declaration, scopeStack, tree);
+    auto inheritsProp = decl->getPropertyValue("inherits");
+    if (inheritsProp) {
+      validateInheritance(decl, scopeStack, errors, tree, currentFramework);
+    }
     for (const auto &port : ports) {
       std::string portName = port->getName();
       // Read only properties (writeable: off) are set by the compiler. Only
