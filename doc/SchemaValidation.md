@@ -19,7 +19,7 @@ flowchart TD
     Validation -->|Fail| Errors["Diagnostic LangError (PrivatePort, ReadOnlyPort, ConstraintFail, etc.)"]
 ```
 
-- **Type Schemas**: Defined via `type <TypeName> { properties: [ ... ] inherits: [ ... ] }`.
+- **Type Schemas**: Defined via `type <TypeName> { properties: [ ... ] inherits: [ ... ] final: <on|off> }`.
 - **Property Specifications**: Defined via `typeProperty <PropName> { ... }`.
 - **Constraint Blocks**: Special inline entities (`constrainedInt`, `constrainedReal`, `constrainedString`, `constrainedList`, `constrainedEntity`) constraining values.
 
@@ -68,6 +68,24 @@ type _SensorSpec {
     ]
 }
 ```
+
+### Final Types (`final`)
+
+Types can disallow inheritance by specifying `final: on`:
+
+```stride
+type _FinalBase {
+    typeName: "finalBase"
+    final: on
+}
+
+type _ForbiddenChild {
+    typeName: "forbiddenChild"
+    inherits: [_FinalBase]    # Error: InheritedFinalType
+}
+```
+
+When `final: on` is specified on a type, any declaration referencing it in its `inherits` list is rejected at compile time with `LangError::InheritedFinalType`.
 
 ---
 

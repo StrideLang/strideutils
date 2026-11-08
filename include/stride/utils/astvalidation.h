@@ -113,6 +113,11 @@ protected:
       std::set<const void *> *processedNodes = nullptr);
 
   static void
+  validateInheritance(std::shared_ptr<DeclarationNode> decl,
+                      ScopeStack scopeStack, std::vector<LangError> &errors,
+                      ASTNode tree, std::string currentFramework);
+
+  static void
   validateConstrainedInt(std::shared_ptr<DeclarationNode> constrainDecl,
                          std::shared_ptr<DeclarationNode> declaration,
                          std::string portName, ASTNode portValue,

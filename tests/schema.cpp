@@ -353,3 +353,31 @@ TEST(Schema, AdvancedCollectionConstraints) {
   EXPECT_EQ(errors[4].type, LangError::ConstraintFail);
   EXPECT_EQ(errors[4].lineNumber, 116);
 }
+
+TEST(Schema, FinalType) {
+  auto strideroot = ASTFunctions::getDefaultStrideRoot();
+  ASTNode tree;
+  tree = AST::parseFile(TESTS_SOURCE_DIR "schema/14_final_type.stride");
+  ASSERT_TRUE(tree != nullptr);
+  ASTFunctions::preprocess(tree);
+  std::vector<LangError> errors;
+  ASTValidation::validateTypes(tree, errors, {}, tree);
+
+  EXPECT_EQ(errors.size(), 4);
+
+  // Error 1: forbiddenChild1 inherits from final type _FinalBase
+  EXPECT_EQ(errors[0].type, LangError::InheritedFinalType);
+  EXPECT_EQ(errors[0].lineNumber, 32);
+
+  // Error 2: forbiddenChild2 inherits from final type _FinalBase in list
+  EXPECT_EQ(errors[1].type, LangError::InheritedFinalType);
+  EXPECT_EQ(errors[1].lineNumber, 37);
+
+  // Error 3: 'final' property is invalid on a signal declaration
+  EXPECT_EQ(errors[2].type, LangError::InvalidPort);
+  EXPECT_EQ(errors[2].lineNumber, 41);
+
+  // Error 4: 'final' expects a Switch literal, given Int
+  EXPECT_EQ(errors[3].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[3].lineNumber, 46);
+}

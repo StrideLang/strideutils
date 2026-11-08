@@ -1,0 +1,47 @@
+type _FinalBase {
+    typeName: "finalBase"
+    final: on
+}
+
+type _NonFinalBase {
+    typeName: "nonFinalBase"
+    final: off
+}
+
+type _DefaultBase {
+    typeName: "defaultBase"
+}
+
+type _AllowedChild1 {
+    typeName: "allowedChild1"
+    inherits: [_NonFinalBase]
+}
+
+type _AllowedChild2 {
+    typeName: "allowedChild2"
+    inherits: [_DefaultBase]
+}
+
+type _AllowedChild3 {
+    typeName: "allowedChild3"
+    inherits: [_NonFinalBase, _DefaultBase]
+}
+
+type _ForbiddenChild1 {
+    typeName: "forbiddenChild1"
+    inherits: [_FinalBase]
+}
+
+type _ForbiddenChild2 {
+    typeName: "forbiddenChild2"
+    inherits: [_DefaultBase, _FinalBase]
+}
+
+signal InvalidSignal {
+    final: on
+}
+
+type _InvalidFinalValue {
+    typeName: "invalidFinalValue"
+    final: 123
+}

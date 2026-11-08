@@ -136,6 +136,9 @@ public:
   getInheritedPorts(std::shared_ptr<DeclarationNode> entityDecl,
                     ScopeStack scope, ASTNode tree);
 
+  // Whether a type declaration is marked final (`final: on`)
+  static bool isFinalType(std::shared_ptr<DeclarationNode> typeDecl);
+
   // Type information
   static std::vector<ASTNode>
   getPortsForType(std::string typeName, ScopeStack scope, ASTNode tree,
