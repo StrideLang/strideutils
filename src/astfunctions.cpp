@@ -95,6 +95,15 @@ bool isStrideRoot(const std::filesystem::path &path) {
          std::filesystem::is_directory(path / "library", ec);
 }
 
+#if !defined(STRIDE_OFFICIAL_RELEASE)
+bool isDevelopmentGitWorktree(const std::filesystem::path &path) {
+  std::error_code ec;
+  return std::filesystem::exists(path / ".git", ec) ||
+         std::filesystem::exists(path / ".." / ".git", ec) ||
+         std::filesystem::exists(path / ".." / ".." / ".git", ec);
+}
+#endif
+
 std::string findStrideRoot() {
   std::vector<std::filesystem::path> candidates;
   // Next to the program, as an installed or packaged program has it
@@ -102,20 +111,39 @@ std::string findStrideRoot() {
   if (!exe.empty()) {
     candidates.push_back(exe / "strideroot");
     candidates.push_back(exe / ".." / "share" / "stride" / "strideroot");
-    candidates.push_back(exe / ".." / "strideroot");
-    candidates.push_back(exe / ".." / ".." / "strideroot");
-    candidates.push_back(exe / ".." / ".." / ".." / "strideroot");
-    candidates.push_back(exe / ".." / ".." / ".." / ".." / "strideroot");
+#if !defined(STRIDE_OFFICIAL_RELEASE)
+    // Upward build tree discovery is restricted to developer builds with STRIDE_DEV active:
+    const char *strideDev = getenv("STRIDE_DEV");
+    if (strideDev && std::string(strideDev) != "0") {
+      std::vector<std::filesystem::path> devCandidates = {
+        exe / ".." / "strideroot",
+        exe / ".." / ".." / "strideroot",
+        exe / ".." / ".." / ".." / "strideroot",
+        exe / ".." / ".." / ".." / ".." / "strideroot"
+      };
+      for (const auto &cand : devCandidates) {
+        if (isDevelopmentGitWorktree(cand)) {
+          candidates.push_back(cand);
+        }
+      }
+    }
+#endif
   }
   candidates.push_back(userFolder());
 #ifdef STRIDEROOT_DEFAULT
   // The checkout the program was built with (set when configuring)
   candidates.push_back(STRIDEROOT_DEFAULT);
 #endif
-  // Beside the repositories, from where tests are run
+
+#if !defined(STRIDE_OFFICIAL_RELEASE)
+  // Beside the repositories, from where tests are run (developer builds with STRIDE_DEV only)
   std::error_code ec;
-  candidates.push_back(std::filesystem::current_path(ec) / ".." / ".." /
-                       ".." / "Stride" / "strideroot");
+  const char *strideDev = getenv("STRIDE_DEV");
+  if (strideDev && std::string(strideDev) != "0") {
+    candidates.push_back(std::filesystem::current_path(ec) / ".." / ".." /
+                         ".." / "Stride" / "strideroot");
+  }
+#endif
 
   for (const auto &candidate : candidates) {
     if (isStrideRoot(candidate)) {
@@ -137,12 +165,15 @@ std::string findStrideRoot() {
 } // namespace
 
 std::string ASTFunctions::getDefaultStrideRoot() {
-  if (getenv("STRIDE_DEV")) {
+#if !defined(STRIDE_OFFICIAL_RELEASE)
+  const char *strideDev = getenv("STRIDE_DEV");
+  if (strideDev && std::string(strideDev) != "0") {
     static const std::string devFound = findStrideRoot();
     if (!devFound.empty()) {
       return devFound;
     }
   }
+#endif
   auto strideroot = getenv("STRIDEROOT");
   if (strideroot) {
     return std::string(strideroot);
