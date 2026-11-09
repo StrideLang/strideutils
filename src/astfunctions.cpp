@@ -102,6 +102,10 @@ std::string findStrideRoot() {
   if (!exe.empty()) {
     candidates.push_back(exe / "strideroot");
     candidates.push_back(exe / ".." / "share" / "stride" / "strideroot");
+    candidates.push_back(exe / ".." / "strideroot");
+    candidates.push_back(exe / ".." / ".." / "strideroot");
+    candidates.push_back(exe / ".." / ".." / ".." / "strideroot");
+    candidates.push_back(exe / ".." / ".." / ".." / ".." / "strideroot");
   }
   candidates.push_back(userFolder());
 #ifdef STRIDEROOT_DEFAULT
@@ -133,6 +137,12 @@ std::string findStrideRoot() {
 } // namespace
 
 std::string ASTFunctions::getDefaultStrideRoot() {
+  if (getenv("STRIDE_DEV")) {
+    static const std::string devFound = findStrideRoot();
+    if (!devFound.empty()) {
+      return devFound;
+    }
+  }
   auto strideroot = getenv("STRIDEROOT");
   if (strideroot) {
     return std::string(strideroot);
