@@ -200,3 +200,147 @@ TEST(Library, PackageMathConstants) {
   EXPECT_TRUE(std::find(mathNames.begin(), mathNames.end(), "E") != mathNames.end());
 }
 
+TEST(Library, PackageControlImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Control", "Control");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Pid") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Hysteresis") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "SlewRateLimiter") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Clarke") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Park") != names.end());
+}
+
+TEST(Library, PackageSensorsImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Sensors", "Sensors");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Debounce") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Deadband") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "LinearCalibration") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ComplementaryFilter") != names.end());
+}
+
+TEST(Library, PackageEstimationImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Estimation", "Estimation");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Filter") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Detector") != names.end());
+}
+
+TEST(Library, PackageDspExtendedImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Dsp", "Dsp");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Detector") != names.end());       // Goertzel
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Line") != names.end());           // FractionalDelay
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Follower") != names.end());       // EnvelopeFollower
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Device") != names.end());         // Compressor
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Fast") != names.end());           // Limiter
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "SoftClip") != names.end());       // Saturate
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Tanh") != names.end());           // Saturate
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Fir7") != names.end());           // Halfband
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Decimator2") != names.end());     // Cic
+}
+
+TEST(Library, PackageWindowImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Window", "Window");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Hann") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Hamming") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Blackman") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "FlatTop") != names.end());
+}
+
+TEST(Library, PackageLinAlgImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("LinAlg", "LinAlg");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Dot2D") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Cross3D") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Norm3D") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Transform2D") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "MatMul2x2") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "RotateVector3D") != names.end());
+}
+
+TEST(Library, PackageTestImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Test", "Test");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "AssertInRange") != names.end());
+}
+
+
