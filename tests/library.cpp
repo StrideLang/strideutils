@@ -77,3 +77,126 @@ TEST(Library, MultiSegmentQualifiedImport) {
   EXPECT_TRUE(members.find("Sub") != members.end());
   EXPECT_EQ(members["Sub"][0], nodes[0]);
 }
+
+TEST(Library, PackageDspImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  // Load package Dsp as Dsp
+  auto nodes = library.loadImport("Dsp", "Dsp");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  // Verify Level, Pan, and submodules were loaded
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Level") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Pan") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "BiQuad") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "Oscillator") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "C4") != names.end());
+}
+
+TEST(Library, PackageIOImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  // Load IO::Serial as Serial
+  auto serialNodes = library.loadImport("IO::Serial", "Serial");
+  EXPECT_FALSE(serialNodes.empty());
+
+  std::vector<std::string> serialNames;
+  for (const auto &node : serialNodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      serialNames.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+  EXPECT_TRUE(std::find(serialNames.begin(), serialNames.end(), "Print") != serialNames.end());
+  EXPECT_TRUE(std::find(serialNames.begin(), serialNames.end(), "Out") != serialNames.end());
+  EXPECT_TRUE(std::find(serialNames.begin(), serialNames.end(), "In") != serialNames.end());
+
+  // Load IO::Osc as Osc
+  auto oscNodes = library.loadImport("IO::Osc", "Osc");
+  EXPECT_FALSE(oscNodes.empty());
+
+  std::vector<std::string> oscNames;
+  for (const auto &node : oscNodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      oscNames.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+  EXPECT_TRUE(std::find(oscNames.begin(), oscNames.end(), "Out") != oscNames.end());
+  EXPECT_TRUE(std::find(oscNames.begin(), oscNames.end(), "In") != oscNames.end());
+}
+
+TEST(Library, PackageMathConstants) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  // 1. Verify root prelude does NOT contain deprecated _Pi, _TwoPi, _E
+  auto members = library.getLibraryMembers();
+  ASSERT_TRUE(members.find("") != members.end());
+  const auto &rootNodes = members[""];
+
+  std::vector<std::string> rootNames;
+  for (const auto &node : rootNodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      rootNames.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(rootNames.begin(), rootNames.end(), "_Pi") == rootNames.end());
+  EXPECT_TRUE(std::find(rootNames.begin(), rootNames.end(), "_TwoPi") == rootNames.end());
+  EXPECT_TRUE(std::find(rootNames.begin(), rootNames.end(), "_E") == rootNames.end());
+
+  // 2. Verify Pi, TwoPi, and E are registered under package Math
+  EXPECT_TRUE(std::find(rootNames.begin(), rootNames.end(), "Pi") != rootNames.end());
+  EXPECT_TRUE(std::find(rootNames.begin(), rootNames.end(), "TwoPi") != rootNames.end());
+  EXPECT_TRUE(std::find(rootNames.begin(), rootNames.end(), "E") != rootNames.end());
+
+  for (const auto &node : rootNodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      auto decl = std::static_pointer_cast<DeclarationNode>(node);
+      if (decl->getName() == "Pi" || decl->getName() == "TwoPi" || decl->getName() == "E") {
+        auto nsProp = decl->getCompilerProperty("namespaceTree");
+        ASSERT_TRUE(nsProp != nullptr);
+        ASSERT_FALSE(nsProp->getChildren().empty());
+        auto val = std::static_pointer_cast<ValueNode>(nsProp->getChildren()[0]);
+        EXPECT_EQ(val->getStringValue(), "Math");
+      }
+    }
+  }
+
+  // 3. Load Math::Constants explicitly as MathConstants
+  auto constNodes = library.loadImport("Math::Constants", "MathConstants");
+  EXPECT_FALSE(constNodes.empty());
+
+  std::vector<std::string> constNames;
+  for (const auto &node : constNodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      constNames.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+  EXPECT_TRUE(std::find(constNames.begin(), constNames.end(), "Pi") != constNames.end());
+  EXPECT_TRUE(std::find(constNames.begin(), constNames.end(), "TwoPi") != constNames.end());
+  EXPECT_TRUE(std::find(constNames.begin(), constNames.end(), "E") != constNames.end());
+
+  // 4. Load package Math directly
+  auto mathNodes = library.loadImport("Math", "Math");
+  EXPECT_FALSE(mathNodes.empty());
+
+  std::vector<std::string> mathNames;
+  for (const auto &node : mathNodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      mathNames.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+  EXPECT_TRUE(std::find(mathNames.begin(), mathNames.end(), "Pi") != mathNames.end());
+  EXPECT_TRUE(std::find(mathNames.begin(), mathNames.end(), "TwoPi") != mathNames.end());
+  EXPECT_TRUE(std::find(mathNames.begin(), mathNames.end(), "E") != mathNames.end());
+}
+

@@ -150,8 +150,13 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         for (const auto &child : fileTree->getChildren()) {
           if (child->getNodeType() == AST::Declaration ||
               child->getNodeType() == AST::ArrayDeclaration) {
-            if (!pkgSegs.empty() &&
-                !child->getCompilerProperty("namespaceTree")) {
+            if (!importAs.empty()) {
+              child->removeCompilerProperty("namespaceTree");
+              child->appendToPropertyValue(
+                  "namespaceTree",
+                  std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
+            } else if (!pkgSegs.empty() &&
+                       !child->getCompilerProperty("namespaceTree")) {
               for (const auto &seg : pkgSegs) {
                 child->appendToPropertyValue(
                     "namespaceTree",
@@ -167,6 +172,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         if (dNode->getNodeType() == AST::Declaration ||
             dNode->getNodeType() == AST::ArrayDeclaration) {
           if (!importAs.empty()) {
+            dNode->removeCompilerProperty("namespaceTree");
             dNode->appendToPropertyValue(
                 "namespaceTree",
                 std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
@@ -181,6 +187,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         if (dNode->getNodeType() == AST::Declaration ||
             dNode->getNodeType() == AST::ArrayDeclaration) {
           if (!importAs.empty()) {
+            dNode->removeCompilerProperty("namespaceTree");
             dNode->appendToPropertyValue(
                 "namespaceTree",
                 std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
@@ -202,8 +209,13 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         for (const auto &child : fileTree->getChildren()) {
           if (child->getNodeType() == AST::Declaration ||
               child->getNodeType() == AST::ArrayDeclaration) {
-            if (!pkgSegs.empty() &&
-                !child->getCompilerProperty("namespaceTree")) {
+            if (!importAs.empty()) {
+              child->removeCompilerProperty("namespaceTree");
+              child->appendToPropertyValue(
+                  "namespaceTree",
+                  std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
+            } else if (!pkgSegs.empty() &&
+                       !child->getCompilerProperty("namespaceTree")) {
               for (const auto &seg : pkgSegs) {
                 child->appendToPropertyValue(
                     "namespaceTree",
