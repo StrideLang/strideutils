@@ -50,6 +50,10 @@ public:
 
   static std::vector<std::shared_ptr<ImportNode>> getImportNodes(ASTNode tree);
 
+  // The full path an import names: `import Control::Foc as Foc` gives
+  // "Control::Foc". ImportNode::importName() is only the last segment.
+  static std::string getImportPath(std::shared_ptr<ImportNode> import);
+
   static std::vector<std::shared_ptr<PackageNode>>
   getPackageNodes(ASTNode tree);
 
@@ -69,6 +73,18 @@ public:
   findAllDeclarations(std::string objectName, const ScopeStack &scopeStack,
                       ASTNode tree, std::vector<std::string> namespaces = {},
                       std::string currentFramework = std::string());
+
+  // Look up the declaration a node refers to, using the node's own name and
+  // namespace qualifier (`Pkg::Name` in a call). Prefer these over passing
+  // getNodeName(node) to findDeclarationByName, which drops the qualifier.
+  static std::shared_ptr<DeclarationNode>
+  findDeclarationForNode(ASTNode node, const ScopeStack &scopeStack,
+                         ASTNode tree, std::string framework = std::string());
+
+  static std::vector<std::shared_ptr<DeclarationNode>>
+  findAllDeclarationsForNode(ASTNode node, const ScopeStack &scopeStack,
+                             ASTNode tree,
+                             std::string currentFramework = std::string());
 
   static std::shared_ptr<DeclarationNode>
   findTypeDeclaration(std::shared_ptr<DeclarationNode> entityDecl,

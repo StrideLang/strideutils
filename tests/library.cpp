@@ -344,3 +344,42 @@ TEST(Library, PackageTestImport) {
 }
 
 
+static std::vector<std::string> namespaceOf(const ASTNode &node) {
+  std::vector<std::string> segs;
+  if (auto ns = node->getCompilerProperty("namespaceTree")) {
+    for (const auto &seg : ns->getChildren()) {
+      segs.push_back(std::static_pointer_cast<ValueNode>(seg)->getStringValue());
+    }
+  }
+  return segs;
+}
+
+TEST(Library, ImportAliasReplacesPackageNamespace) {
+  // SubModule.stride declares `package PackageRoot::SubPkg`. Imported with an
+  // alias, its declarations live under the alias only.
+  {
+    StrideLibrary library;
+    library.initializeLibrary("", {TESTS_SOURCE_DIR "library"});
+    auto nodes = library.loadImport("PackageRoot::SubPkg::SubModule", "Sub");
+    ASSERT_GE(nodes.size(), 1u);
+    EXPECT_EQ(namespaceOf(nodes[0]), std::vector<std::string>({"Sub"}));
+  }
+  // Without an alias, the package path is the namespace.
+  {
+    StrideLibrary library;
+    library.initializeLibrary("", {TESTS_SOURCE_DIR "library"});
+    auto nodes = library.loadImport("PackageRoot::SubPkg::SubModule", "");
+    ASSERT_GE(nodes.size(), 1u);
+    EXPECT_EQ(namespaceOf(nodes[0]),
+              std::vector<std::string>({"PackageRoot", "SubPkg"}));
+  }
+  // A directory import with an alias replaces, not appends to, the package
+  // path the directory loader assigned.
+  {
+    StrideLibrary library;
+    library.initializeLibrary("", {TESTS_SOURCE_DIR "library"});
+    auto nodes = library.loadImport("PackageRoot::SubPkg", "Sub");
+    ASSERT_GE(nodes.size(), 1u);
+    EXPECT_EQ(namespaceOf(nodes[0]), std::vector<std::string>({"Sub"}));
+  }
+}

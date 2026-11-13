@@ -126,6 +126,24 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
     return parsed;
   };
 
+  // The namespace a call must use to reach an imported declaration. An
+  // `import X as Y` alias replaces it; without an alias it is the file's
+  // `package` path (or what loadAllInDirectory already assigned).
+  auto assignNamespace = [&importAs](const ASTNode &node,
+                                     const std::vector<std::string> &pkgSegs) {
+    if (!importAs.empty()) {
+      node->removeCompilerProperty("namespaceTree");
+      node->appendToPropertyValue(
+          "namespaceTree",
+          std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
+    } else if (!pkgSegs.empty() && !node->getCompilerProperty("namespaceTree")) {
+      for (const auto &seg : pkgSegs) {
+        node->appendToPropertyValue(
+            "namespaceTree", std::make_shared<ValueNode>(seg, __FILE__, __LINE__));
+      }
+    }
+  };
+
   for (const auto &includePath : searchPaths) {
     std::filesystem::path p = includePath;
     std::filesystem::path fileCandidate = p / (normalized + ".stride");
@@ -144,25 +162,11 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         std::vector<std::string> pkgSegs;
         if (!packageNodes.empty()) {
           pkgSegs = packageNodes[0]->packageSegments();
-        } else if (!importAs.empty()) {
-          pkgSegs = {importAs};
         }
         for (const auto &child : fileTree->getChildren()) {
           if (child->getNodeType() == AST::Declaration ||
               child->getNodeType() == AST::ArrayDeclaration) {
-            if (!importAs.empty()) {
-              child->removeCompilerProperty("namespaceTree");
-              child->appendToPropertyValue(
-                  "namespaceTree",
-                  std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
-            } else if (!pkgSegs.empty() &&
-                       !child->getCompilerProperty("namespaceTree")) {
-              for (const auto &seg : pkgSegs) {
-                child->appendToPropertyValue(
-                    "namespaceTree",
-                    std::make_shared<ValueNode>(seg, __FILE__, __LINE__));
-              }
-            }
+            assignNamespace(child, pkgSegs);
             newNodes.push_back(child);
           }
         }
@@ -171,12 +175,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
       for (const auto &dNode : dirNodes) {
         if (dNode->getNodeType() == AST::Declaration ||
             dNode->getNodeType() == AST::ArrayDeclaration) {
-          if (!importAs.empty()) {
-            dNode->removeCompilerProperty("namespaceTree");
-            dNode->appendToPropertyValue(
-                "namespaceTree",
-                std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
-          }
+          assignNamespace(dNode, {});
           newNodes.push_back(dNode);
         }
       }
@@ -186,12 +185,7 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
       for (const auto &dNode : dirNodes) {
         if (dNode->getNodeType() == AST::Declaration ||
             dNode->getNodeType() == AST::ArrayDeclaration) {
-          if (!importAs.empty()) {
-            dNode->removeCompilerProperty("namespaceTree");
-            dNode->appendToPropertyValue(
-                "namespaceTree",
-                std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
-          }
+          assignNamespace(dNode, {});
           newNodes.push_back(dNode);
         }
       }
@@ -203,25 +197,11 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
         std::vector<std::string> pkgSegs;
         if (!packageNodes.empty()) {
           pkgSegs = packageNodes[0]->packageSegments();
-        } else if (!importAs.empty()) {
-          pkgSegs = {importAs};
         }
         for (const auto &child : fileTree->getChildren()) {
           if (child->getNodeType() == AST::Declaration ||
               child->getNodeType() == AST::ArrayDeclaration) {
-            if (!importAs.empty()) {
-              child->removeCompilerProperty("namespaceTree");
-              child->appendToPropertyValue(
-                  "namespaceTree",
-                  std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
-            } else if (!pkgSegs.empty() &&
-                       !child->getCompilerProperty("namespaceTree")) {
-              for (const auto &seg : pkgSegs) {
-                child->appendToPropertyValue(
-                    "namespaceTree",
-                    std::make_shared<ValueNode>(seg, __FILE__, __LINE__));
-              }
-            }
+            assignNamespace(child, pkgSegs);
             newNodes.push_back(child);
           }
         }

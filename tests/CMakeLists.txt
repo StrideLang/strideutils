@@ -8,6 +8,7 @@ set(STRIDEUTILS_TEST_SRC
   astquery_statemachine_test.cpp
   logger_tests.cpp
   cache_tests.cpp
+  lookup_lint_tests.cpp
 )
 
 add_executable(strideutils_tests main.cpp ${STRIDEUTILS_TEST_SRC})

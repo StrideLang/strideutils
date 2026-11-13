@@ -291,12 +291,10 @@ bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope,
       if (node->getNodeType() == AST::Import) {
         std::shared_ptr<ImportNode> import =
             std::static_pointer_cast<ImportNode>(node);
-        // TODO add namespace support here (e.g. import
-        // Platform::Filters::Filter)
         bool imported = false;
         for (const auto &importNode : importList) {
-          if ((std::static_pointer_cast<ImportNode>(importNode)->importName() ==
-               import->importName()) &&
+          if ((ASTQuery::getImportPath(importNode) ==
+               ASTQuery::getImportPath(import)) &&
               (std::static_pointer_cast<ImportNode>(importNode)
                    ->importAlias() == import->importAlias())) {
             imported = true;
@@ -315,7 +313,8 @@ bool ASTFunctions::preprocess(ASTNode tree, ScopeStack *platformScope,
 
     library.initializeLibrary(strideroot, importPaths);
     for (const auto &import : importList) {
-      library.loadImport(import->importName(), import->importAlias());
+      library.loadImport(ASTQuery::getImportPath(import),
+                         import->importAlias());
     }
   }
 
@@ -693,9 +692,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
           framework = std::static_pointer_cast<ValueNode>(frameworkNode)
                           ->getStringValue();
         }
-        auto existingDeclaration = ASTQuery::findDeclarationByName(
-            ASTQuery::getNodeName(usedEntity), {}, tree, usedEntity->getNamespaceList(),
-            framework);
+        auto existingDeclaration = ASTQuery::findDeclarationForNode(usedEntity, {}, tree, framework);
         if (!existingDeclaration) {
           tree->addChild(usedEntity);
         }
@@ -822,7 +819,8 @@ void ASTFunctions::fillDefaultPropertiesForNode(
         destFunc->getProperties();
     std::shared_ptr<DeclarationNode> functionModule =
         ASTQuery::findDeclarationByName(destFunc->getName(),
-                                        {{nullptr, scopeNodes}}, nullptr);
+                                        {{nullptr, scopeNodes}}, nullptr,
+                                        destFunc->getNamespaceList());
     if (functionModule) {
       if (functionModule->getEntityType() == "module" ||
           functionModule->getEntityType() == "reaction" ||
@@ -1030,7 +1028,7 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
         std::static_pointer_cast<ListNode>(decl->getPropertyValue("entities"));
     // TODO namespaces
     if (ASTQuery::isCodeGenerator(
-            ASTQuery::findDeclarationByName(decl->getName(), scope, tree),
+            ASTQuery::findDeclarationByName(decl->getName(), scope, tree, {}),
             scope, tree) &&
         internalBlocks) {
       if (internalBlocks->getNodeType() == AST::List) {
@@ -1416,7 +1414,7 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
       int index = evaluateConstInteger(indexList->getChildren().at(0), scope,
                                        tree, errors);
       std::shared_ptr<DeclarationNode> declaration =
-          ASTQuery::findDeclarationByName(arrayNode->getName(), scope, tree);
+          ASTQuery::findDeclarationByName(arrayNode->getName(), scope, tree, arrayNode->getNamespaceList());
       if (declaration && declaration->getNodeType() == AST::ArrayDeclaration) {
         ASTNode member = ASTQuery::getMemberFromArrayConst(declaration, index,
                                                            tree, scope, errors);
@@ -1447,7 +1445,7 @@ int64_t ASTFunctions::evaluateConstInteger(ASTNode node, ScopeStack scope,
     std::shared_ptr<EntityNode> nameNode =
         std::static_pointer_cast<EntityNode>(node);
     std::shared_ptr<DeclarationNode> declaration =
-        ASTQuery::findDeclarationByName(nameNode->getName(), scope, tree);
+        ASTQuery::findDeclarationByName(nameNode->getName(), scope, tree, nameNode->getNamespaceList());
     if (declaration && ASTQuery::isConstant(declaration, scope, tree)) {
       return evaluateConstInteger(declaration->getPropertyValue("value"), scope,
                                   tree, errors);
@@ -1532,7 +1530,7 @@ double ASTFunctions::evaluateConstReal(ASTNode node, ScopeStack scope,
   } else if (node->getNodeType() == AST::Array) {
     ArrayNode *arrayNode = static_cast<ArrayNode *>(node.get());
     std::shared_ptr<DeclarationNode> declaration =
-        ASTQuery::findDeclarationByName(arrayNode->getName(), scope, tree);
+        ASTQuery::findDeclarationByName(arrayNode->getName(), scope, tree, arrayNode->getNamespaceList());
     int index = evaluateConstInteger(arrayNode->index(), scope, tree, errors);
     if (declaration && declaration->getNodeType() == AST::ArrayDeclaration) {
       ASTNode member = ASTQuery::getMemberFromArrayConst(declaration, index,
@@ -1590,7 +1588,7 @@ std::string ASTFunctions::evaluateConstString(ASTNode node, ScopeStack scope,
   } else if (node->getNodeType() == AST::Array) {
     auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
     std::shared_ptr<DeclarationNode> declaration =
-        ASTQuery::findDeclarationByName(arrayNode->getName(), scope, tree);
+        ASTQuery::findDeclarationByName(arrayNode->getName(), scope, tree, arrayNode->getNamespaceList());
     int index = evaluateConstInteger(arrayNode->index(), scope, tree, errors);
     if (declaration && declaration->getNodeType() == AST::ArrayDeclaration) {
       ASTNode member = ASTQuery::getMemberFromArrayConst(declaration, index,

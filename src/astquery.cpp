@@ -292,6 +292,14 @@ ASTQuery::getSystemNodes(ASTNode tree) {
   return platformNodes;
 }
 
+std::string ASTQuery::getImportPath(std::shared_ptr<ImportNode> import) {
+  std::string path;
+  for (const auto &segment : import->getNamespaceList()) {
+    path += segment + "::";
+  }
+  return path + import->importName();
+}
+
 std::vector<std::shared_ptr<ImportNode>>
 ASTQuery::getImportNodes(ASTNode tree) {
   std::vector<std::shared_ptr<ImportNode>> importList;
@@ -302,12 +310,10 @@ ASTQuery::getImportNodes(ASTNode tree) {
     if (node->getNodeType() == AST::Import) {
       std::shared_ptr<ImportNode> import =
           std::static_pointer_cast<ImportNode>(node);
-      // FIXME add namespace support here (e.g. import
-      // Platform::Filters::Filter)
       bool imported = false;
       for (const auto &importNode : importList) {
-        if ((std::static_pointer_cast<ImportNode>(importNode)->importName() ==
-             import->importName()) &&
+        if ((getImportPath(std::static_pointer_cast<ImportNode>(importNode)) ==
+             getImportPath(import)) &&
             (std::static_pointer_cast<ImportNode>(importNode)->importAlias() ==
              import->importAlias())) {
           imported = true;
@@ -592,7 +598,7 @@ int ASTQuery::getNodeSize(ASTNode node, const ScopeStack &scopeStack,
   } else if (node->getNodeType() == AST::Entity) {
     EntityNode *entityNode = static_cast<EntityNode *>(node.get());
     std::shared_ptr<DeclarationNode> decl = ASTQuery::findDeclarationByName(
-        entityNode->getName(), scopeStack, tree);
+        entityNode->getName(), scopeStack, tree, entityNode->getNamespaceList());
     if (!decl) {
       size = -1; // Entity not declared
     } else if (decl->getNodeType() == AST::ArrayDeclaration) {
@@ -859,7 +865,7 @@ int ASTQuery::getLargestPropertySize(
     if (value->getNodeType() == AST::Entity) {
       EntityNode *name = static_cast<EntityNode *>(value.get());
       std::shared_ptr<DeclarationNode> entityDecl =
-          ASTQuery::findDeclarationByName(name->getName(), scope, tree);
+          ASTQuery::findDeclarationByName(name->getName(), scope, tree, name->getNamespaceList());
       if (entityDecl) {
         if (entityDecl->getNodeType() == AST::Declaration) {
           if (maxSize < 1) {
@@ -910,7 +916,7 @@ ASTQuery::getInheritedTypes(std::shared_ptr<DeclarationNode> entityTypeDecl,
               std::static_pointer_cast<EntityNode>(inheritsFromName);
           std::shared_ptr<DeclarationNode> inheritedDeclaration =
               ASTQuery::findDeclarationByName(inheritsEntity->getName(), scope,
-                                              tree);
+                                              tree, inheritsEntity->getNamespaceList());
           if (inheritedDeclaration) {
             inheritedTypes.push_back(inheritedDeclaration);
             auto parentTypes =
@@ -926,7 +932,7 @@ ASTQuery::getInheritedTypes(std::shared_ptr<DeclarationNode> entityTypeDecl,
       auto inheritsEntity = std::static_pointer_cast<EntityNode>(inherits);
       std::shared_ptr<DeclarationNode> inheritedDeclaration =
           ASTQuery::findDeclarationByName(inheritsEntity->getName(), scope,
-                                          tree);
+                                          tree, inheritsEntity->getNamespaceList());
       if (inheritedDeclaration) {
         inheritedTypes.push_back(inheritedDeclaration);
         auto parentTypes =
@@ -1484,9 +1490,7 @@ ASTNode ASTQuery::getMemberFromArrayConst(
           }
           return nullptr;
         } else if (value && value->getNodeType() == AST::Array) {
-          auto decl = ASTQuery::findDeclarationByName(
-              ASTQuery::getNodeName(entityDecl), scopeStack, tree,
-              entityDecl->getNamespaceList());
+          auto decl = ASTQuery::findDeclarationForNode(entityDecl, scopeStack, tree);
           auto indexList = std::static_pointer_cast<ArrayNode>(value);
           if (indexList->getChildren().size() == 1) {
             auto previousErrors = errors ? errors->size() : 0;
@@ -1994,13 +1998,33 @@ bool ASTQuery::isModuleNode(ASTNode node, const ScopeStack &scope,
     return decl->getEntityType() == "module";
   }
   if (tree) {
-    auto decl = ASTQuery::findDeclarationByName(ASTQuery::getNodeName(node),
-                                                scope, tree);
+    auto decl = ASTQuery::findDeclarationForNode(node, scope, tree);
     if (decl) {
       return decl->getEntityType() == "module";
     }
   }
   return false;
+}
+
+std::shared_ptr<DeclarationNode>
+ASTQuery::findDeclarationForNode(ASTNode node, const ScopeStack &scopeStack,
+                                 ASTNode tree, std::string framework) {
+  if (!node) {
+    return nullptr;
+  }
+  return findDeclarationByName(getNodeName(node), scopeStack, tree,
+                               node->getNamespaceList(), framework);
+}
+
+std::vector<std::shared_ptr<DeclarationNode>>
+ASTQuery::findAllDeclarationsForNode(ASTNode node, const ScopeStack &scopeStack,
+                                     ASTNode tree,
+                                     std::string currentFramework) {
+  if (!node) {
+    return {};
+  }
+  return findAllDeclarations(getNodeName(node), scopeStack, tree,
+                             node->getNamespaceList(), currentFramework);
 }
 
 bool ASTQuery::namespaceMatch(std::vector<std::string> scopeList,
