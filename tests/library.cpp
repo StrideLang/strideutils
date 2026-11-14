@@ -80,7 +80,7 @@ TEST(Library, MultiSegmentQualifiedImport) {
 
 TEST(Library, PackageDspImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   // Load package Dsp as Dsp
   auto nodes = library.loadImport("Dsp", "Dsp");
@@ -103,7 +103,7 @@ TEST(Library, PackageDspImport) {
 
 TEST(Library, PackageIOImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   // Load IO::Serial as Serial
   auto serialNodes = library.loadImport("IO::Serial", "Serial");
@@ -135,7 +135,7 @@ TEST(Library, PackageIOImport) {
 
 TEST(Library, PackageMathConstants) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   // 1. Verify root prelude does NOT contain deprecated _Pi, _TwoPi, _E
   auto members = library.getLibraryMembers();
@@ -202,7 +202,7 @@ TEST(Library, PackageMathConstants) {
 
 TEST(Library, PackageControlImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Control", "Control");
   EXPECT_FALSE(nodes.empty());
@@ -223,7 +223,7 @@ TEST(Library, PackageControlImport) {
 
 TEST(Library, PackageSensorsImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Sensors", "Sensors");
   EXPECT_FALSE(nodes.empty());
@@ -243,7 +243,7 @@ TEST(Library, PackageSensorsImport) {
 
 TEST(Library, PackageEstimationImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Estimation", "Estimation");
   EXPECT_FALSE(nodes.empty());
@@ -261,7 +261,7 @@ TEST(Library, PackageEstimationImport) {
 
 TEST(Library, PackageDspExtendedImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Dsp", "Dsp");
   EXPECT_FALSE(nodes.empty());
@@ -286,7 +286,7 @@ TEST(Library, PackageDspExtendedImport) {
 
 TEST(Library, PackageWindowImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Window", "Window");
   EXPECT_FALSE(nodes.empty());
@@ -306,7 +306,7 @@ TEST(Library, PackageWindowImport) {
 
 TEST(Library, PackageLinAlgImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("LinAlg", "LinAlg");
   EXPECT_FALSE(nodes.empty());
@@ -318,17 +318,18 @@ TEST(Library, PackageLinAlgImport) {
     }
   }
 
-  EXPECT_TRUE(std::find(names.begin(), names.end(), "Dot2D") != names.end());
-  EXPECT_TRUE(std::find(names.begin(), names.end(), "Cross3D") != names.end());
-  EXPECT_TRUE(std::find(names.begin(), names.end(), "Norm3D") != names.end());
-  EXPECT_TRUE(std::find(names.begin(), names.end(), "Transform2D") != names.end());
-  EXPECT_TRUE(std::find(names.begin(), names.end(), "MatMul2x2") != names.end());
-  EXPECT_TRUE(std::find(names.begin(), names.end(), "RotateVector3D") != names.end());
+  // Sizes come from the ports, so one module serves every size
+  for (const char *name : {"Dot", "Wedge", "Norm", "Normalize", "Scale",
+                           "Transform", "MatMul", "Transpose", "Multiply",
+                           "Conjugate", "Rotate"}) {
+    EXPECT_TRUE(std::find(names.begin(), names.end(), name) != names.end())
+        << name;
+  }
 }
 
 TEST(Library, PackageTestImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Test", "Test");
   EXPECT_FALSE(nodes.empty());
