@@ -344,6 +344,32 @@ TEST(Library, PackageTestImport) {
   EXPECT_TRUE(std::find(names.begin(), names.end(), "AssertInRange") != names.end());
 }
 
+TEST(Library, PackageTestingImport) {
+  StrideLibrary library;
+  library.initializeLibrary(STRIDEROOT, {});
+
+  auto nodes = library.loadImport("Testing", "Testing");
+  EXPECT_FALSE(nodes.empty());
+
+  std::vector<std::string> names;
+  for (const auto &node : nodes) {
+    if (node->getNodeType() == AST::Declaration) {
+      names.push_back(std::static_pointer_cast<DeclarationNode>(node)->getName());
+    }
+  }
+
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectEqual") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectNear") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectTrue") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectFalse") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectGt") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectGe") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectLt") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectLe") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectMaxError") != names.end());
+  EXPECT_TRUE(std::find(names.begin(), names.end(), "ExpectSnr") != names.end());
+}
+
 
 static std::vector<std::string> namespaceOf(const ASTNode &node) {
   std::vector<std::string> segs;
