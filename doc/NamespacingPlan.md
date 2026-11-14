@@ -146,6 +146,51 @@ stridegen and stridejit suites and boardgame `Reader.*` unchanged.
 Exit: a module can be imported under different aliases by two files in one
 compilation; the existing tests are unchanged.
 
+**Implementation (2026-11-13/14).** Rather than changing every
+lookup, names are made canonical once, while imported declarations are
+inserted:
+
+- Loading (`StrideLibrary::loadImport`, `ASTFunctions::loadAllInDirectory`)
+  keeps `namespaceTree` = the `package` path and no longer applies aliases.
+  `ASTFunctions::tagSourceFile` records on each top-level declaration
+  `_sourcePath` (the import path of its file, e.g. `Control::Foc`), `_package`
+  and `_imports` (the file's `alias=path` table).
+  `ASTFunctions::checkPackageLocation` warns when a package matches neither the
+  file's path nor its directory (D3).
+- `ASTFunctions::canonicalizeQualifier`, called for every call, entity and
+  array reference in `insertRequiredObjectsForNode`, rewrites the qualifier
+  to the canonical package of the declaration it names, as seen from the
+  innermost library declaration being walked (or the root file):
+  an alias expands to its import path; a qualifier that is not an alias is a
+  full path (D1); either matches a declaration by package or by
+  `_sourcePath`. An unqualified name (call, constant or signal) inside a
+  packaged declaration tries its own package first, unless the declaration
+  declares that name itself (its own `Input`, `Output`, blocks).
+  The search covers both pending imports and declarations already inserted
+  into the tree (a second use of a name must still resolve).
+- When an imported declaration is inserted, "is it already in the tree?" is
+  asked with its `namespaceTree`, so a root `Gain` is not mistaken for
+  `Pkg::Gain`.
+- Every later lookup then sees canonical qualifiers (Phase 1 helpers).
+- Barrel re-export (D2) falls out of matching by `_sourcePath`:
+  `Control::Foc::Park` reaches `Control/Foc.stride`.
+- `STRIDE_DEBUG_NAMES=1` logs each resolution: name, qualifier, context and
+  result.
+- Tests: `Namespacing.*` (aliased call, sibling call inside a package, second
+  use of an inserted declaration, unqualified package constant shadowing a
+  root constant, full import path),
+  `Library.ImportKeepsPackageNamespaceAndRecordsSource`.
+
+**Phase 2 result (2026-11-14).** strideutils 69/69, stridegen 80/80, stridejit
+276/276, libgame `Reader.*`/`Tutorials.*` 40/40. The library suite run test by
+test is unchanged at 80/129, but no failure is a name-resolution failure any
+more: library-to-library calls now resolve, and the filters, Delay and LinAlg
+reach code generation, where they fail on compiler bugs outside namespacing
+(array ports output zeros; `(1.0 - Alpha)` with a port-derived type; invalid
+GEP in `Delay::Line`; `OutputPort.rate` in Compressor). Reaching
+`FilterDesign::Coefficients` also exposed a stridegen crash on unary
+expressions in `CodeAnalysis::processStreamNode`, fixed with Phase 2.
+
 ### Phase 3 - Transitive imports and re-export
 
 1. Load imports recursively (B5): when a library file is loaded, process its

@@ -103,6 +103,9 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
     if (!m_libraryPath.empty() && std::filesystem::exists(m_libraryPath) &&
         std::filesystem::is_directory(m_libraryPath)) {
       newNodes = ASTFunctions::loadAllInDirectory(m_libraryPath);
+      for (const auto &node : newNodes) {
+        ASTFunctions::checkPackageLocation(node);
+      }
     }
     if (!newNodes.empty()) {
       m_libraryTrees.push_back(LibraryTree{importName, importAs, newNodes, {}});
@@ -126,20 +129,41 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
     return parsed;
   };
 
-  // The namespace a call must use to reach an imported declaration. An
-  // `import X as Y` alias replaces it; without an alias it is the file's
-  // `package` path (or what loadAllInDirectory already assigned).
-  auto assignNamespace = [&importAs](const ASTNode &node,
-                                     const std::vector<std::string> &pkgSegs) {
-    if (!importAs.empty()) {
-      node->removeCompilerProperty("namespaceTree");
-      node->appendToPropertyValue(
-          "namespaceTree",
-          std::make_shared<ValueNode>(importAs, __FILE__, __LINE__));
-    } else if (!pkgSegs.empty() && !node->getCompilerProperty("namespaceTree")) {
-      for (const auto &seg : pkgSegs) {
-        node->appendToPropertyValue(
-            "namespaceTree", std::make_shared<ValueNode>(seg, __FILE__, __LINE__));
+  // A declaration's namespace is its file's `package` path (or what
+  // loadAllInDirectory assigned). An `as` alias does not change it: the
+  // importing file's alias table maps the alias to this import's path
+  // (ASTFunctions::canonicalizeQualifier).
+  auto loadFile = [&](const std::filesystem::path &filePath) {
+    auto fileTree = loadOrParseFile(filePath);
+    if (!fileTree) {
+      return;
+    }
+    ASTFunctions::tagSourceFile(fileTree, importName);
+    auto packageNodes = ASTQuery::getPackageNodes(fileTree);
+    std::vector<std::string> pkgSegs;
+    if (!packageNodes.empty()) {
+      pkgSegs = packageNodes[0]->packageSegments();
+    }
+    for (const auto &child : fileTree->getChildren()) {
+      if (child->getNodeType() == AST::Declaration ||
+          child->getNodeType() == AST::ArrayDeclaration) {
+        if (!pkgSegs.empty() && !child->getCompilerProperty("namespaceTree")) {
+          for (const auto &seg : pkgSegs) {
+            child->appendToPropertyValue(
+                "namespaceTree",
+                std::make_shared<ValueNode>(seg, __FILE__, __LINE__));
+          }
+        }
+        newNodes.push_back(child);
+      }
+    }
+  };
+  auto loadDirectory = [&](const std::filesystem::path &dirPath) {
+    for (const auto &dNode : ASTFunctions::loadAllInDirectory(dirPath.string())) {
+      if (dNode->getNodeType() == AST::Declaration ||
+          dNode->getNodeType() == AST::ArrayDeclaration) {
+        ASTFunctions::prefixSourcePath(dNode, importName);
+        newNodes.push_back(dNode);
       }
     }
   };
@@ -154,57 +178,13 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
     bool dirExists = std::filesystem::exists(dirCandidate) &&
                      std::filesystem::is_directory(dirCandidate);
 
-    if (fileExists && dirExists) {
-      // Package Root Model: load barrel file + directory sub-modules
-      auto fileTree = loadOrParseFile(fileCandidate);
-      if (fileTree) {
-        auto packageNodes = ASTQuery::getPackageNodes(fileTree);
-        std::vector<std::string> pkgSegs;
-        if (!packageNodes.empty()) {
-          pkgSegs = packageNodes[0]->packageSegments();
-        }
-        for (const auto &child : fileTree->getChildren()) {
-          if (child->getNodeType() == AST::Declaration ||
-              child->getNodeType() == AST::ArrayDeclaration) {
-            assignNamespace(child, pkgSegs);
-            newNodes.push_back(child);
-          }
-        }
+    if (fileExists || dirExists) {
+      // Package Root Model: a barrel file and/or a directory of sub-modules
+      if (fileExists) {
+        loadFile(fileCandidate);
       }
-      auto dirNodes = ASTFunctions::loadAllInDirectory(dirCandidate.string());
-      for (const auto &dNode : dirNodes) {
-        if (dNode->getNodeType() == AST::Declaration ||
-            dNode->getNodeType() == AST::ArrayDeclaration) {
-          assignNamespace(dNode, {});
-          newNodes.push_back(dNode);
-        }
-      }
-      break;
-    } else if (dirExists) {
-      auto dirNodes = ASTFunctions::loadAllInDirectory(dirCandidate.string());
-      for (const auto &dNode : dirNodes) {
-        if (dNode->getNodeType() == AST::Declaration ||
-            dNode->getNodeType() == AST::ArrayDeclaration) {
-          assignNamespace(dNode, {});
-          newNodes.push_back(dNode);
-        }
-      }
-      break;
-    } else if (fileExists) {
-      auto fileTree = loadOrParseFile(fileCandidate);
-      if (fileTree) {
-        auto packageNodes = ASTQuery::getPackageNodes(fileTree);
-        std::vector<std::string> pkgSegs;
-        if (!packageNodes.empty()) {
-          pkgSegs = packageNodes[0]->packageSegments();
-        }
-        for (const auto &child : fileTree->getChildren()) {
-          if (child->getNodeType() == AST::Declaration ||
-              child->getNodeType() == AST::ArrayDeclaration) {
-            assignNamespace(child, pkgSegs);
-            newNodes.push_back(child);
-          }
-        }
+      if (dirExists) {
+        loadDirectory(dirCandidate);
       }
       break;
     }

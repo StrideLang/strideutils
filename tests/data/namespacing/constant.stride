@@ -1,0 +1,6 @@
+import Pkg::Gains as G
+
+# A root constant with the same name as Pkg::Gain: Amplify must not see it.
+constant Gain { value: 5.0 }
+
+In >> G::Amplify() >> Out;

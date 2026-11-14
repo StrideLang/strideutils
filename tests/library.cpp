@@ -354,32 +354,34 @@ static std::vector<std::string> namespaceOf(const ASTNode &node) {
   return segs;
 }
 
-TEST(Library, ImportAliasReplacesPackageNamespace) {
-  // SubModule.stride declares `package PackageRoot::SubPkg`. Imported with an
-  // alias, its declarations live under the alias only.
-  {
+static std::string sourcePathOf(const ASTNode &node) {
+  auto value = node->getCompilerProperty("_sourcePath");
+  return value ? std::static_pointer_cast<ValueNode>(value)->getStringValue()
+               : std::string();
+}
+
+TEST(Library, ImportKeepsPackageNamespaceAndRecordsSource) {
+  // SubModule.stride declares `package PackageRoot::SubPkg`. The package is
+  // the namespace whatever the import alias; the alias lives in the importing
+  // file's import table. Each declaration records the path it was loaded
+  // from.
+  for (const std::string alias : {"Sub", ""}) {
     StrideLibrary library;
     library.initializeLibrary("", {TESTS_SOURCE_DIR "library"});
-    auto nodes = library.loadImport("PackageRoot::SubPkg::SubModule", "Sub");
-    ASSERT_GE(nodes.size(), 1u);
-    EXPECT_EQ(namespaceOf(nodes[0]), std::vector<std::string>({"Sub"}));
-  }
-  // Without an alias, the package path is the namespace.
-  {
-    StrideLibrary library;
-    library.initializeLibrary("", {TESTS_SOURCE_DIR "library"});
-    auto nodes = library.loadImport("PackageRoot::SubPkg::SubModule", "");
+    auto nodes = library.loadImport("PackageRoot::SubPkg::SubModule", alias);
     ASSERT_GE(nodes.size(), 1u);
     EXPECT_EQ(namespaceOf(nodes[0]),
               std::vector<std::string>({"PackageRoot", "SubPkg"}));
+    EXPECT_EQ(sourcePathOf(nodes[0]), "PackageRoot::SubPkg::SubModule");
   }
-  // A directory import with an alias replaces, not appends to, the package
-  // path the directory loader assigned.
+  // A directory import: the same, with the file's path below the directory.
   {
     StrideLibrary library;
     library.initializeLibrary("", {TESTS_SOURCE_DIR "library"});
     auto nodes = library.loadImport("PackageRoot::SubPkg", "Sub");
     ASSERT_GE(nodes.size(), 1u);
-    EXPECT_EQ(namespaceOf(nodes[0]), std::vector<std::string>({"Sub"}));
+    EXPECT_EQ(namespaceOf(nodes[0]),
+              std::vector<std::string>({"PackageRoot", "SubPkg"}));
+    EXPECT_EQ(sourcePathOf(nodes[0]), "PackageRoot::SubPkg::SubModule");
   }
 }

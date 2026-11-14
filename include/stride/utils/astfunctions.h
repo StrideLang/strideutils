@@ -54,6 +54,33 @@ public:
 
   static std::vector<ASTNode> loadAllInDirectory(std::string path);
 
+  // Record on each top-level declaration of a loaded file where it came from
+  // (`_sourcePath`, the import path of the file, e.g. "Control::Foc"), its
+  // `package` (`_package`) and the file's aliased imports (`_imports`,
+  // "alias=path" strings). Calls inside the declaration are later resolved
+  // against these (see canonicalizeQualifier).
+  static void tagSourceFile(ASTNode fileTree, const std::string &sourcePath);
+
+  // Prepend `prefix` to the `_sourcePath` of a declaration tagged relative to
+  // a directory.
+  static void prefixSourcePath(ASTNode decl, const std::string &prefix);
+
+  // Warn (once per file) when a declaration's `package` matches neither the
+  // path it was loaded from nor that path's directory.
+  static void checkPackageLocation(ASTNode decl);
+
+  // Rewrite the namespace qualifier of a call or entity reference to the
+  // canonical package path of the declaration it names, as seen from
+  // `context` (a library declaration, or nullptr for the root file `tree`):
+  // - `Alias::Rest::Name` where Alias is in the context's import table maps
+  //   to the declaration whose package or source path is `path::Rest`.
+  // - an unqualified call inside a packaged library declaration resolves to
+  //   a sibling in the same package first.
+  // Returns true when the qualifier was changed.
+  static bool canonicalizeQualifier(
+      ASTNode node, std::shared_ptr<DeclarationNode> context, ASTNode tree,
+      const std::map<std::string, std::vector<ASTNode>> &objects);
+
   // Insert system and library objects used in tree from import trees.
   // externalNodes provides library and import nodes. The key is the namespace
   // they are imported into

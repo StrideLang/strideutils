@@ -1,0 +1,16 @@
+package Pkg
+
+constant Gain { value: 3.0 }
+
+# Uses the package constant Gain unqualified, and its own signal Output.
+module Amplify {
+    ports: [
+        mainInputPort InPort { entity: Input }
+        mainOutputPort OutPort { entity: Output }
+    ]
+    entities: [
+        signal Input { type: Real domain: OutPort.domain }
+        signal Output { type: Real domain: OutPort.domain }
+    ]
+    streams: [ Input * Gain >> Output; ]
+}

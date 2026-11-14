@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cassert>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -183,6 +184,320 @@ std::string ASTFunctions::getDefaultStrideRoot() {
   return found;
 }
 
+namespace {
+
+std::string stringProperty(const ASTNode &node, const char *name) {
+  auto value = node ? node->getCompilerProperty(name) : nullptr;
+  if (value && value->getNodeType() == AST::String) {
+    return std::static_pointer_cast<ValueNode>(value)->getStringValue();
+  }
+  return std::string();
+}
+
+std::vector<std::string> namespaceTreeOf(const ASTNode &node) {
+  std::vector<std::string> segments;
+  if (auto tree = node->getCompilerProperty("namespaceTree")) {
+    for (const auto &segment : tree->getChildren()) {
+      if (segment->getNodeType() == AST::String) {
+        segments.push_back(
+            std::static_pointer_cast<ValueNode>(segment)->getStringValue());
+      }
+    }
+  }
+  return segments;
+}
+
+std::vector<std::string> splitPath(const std::string &path) {
+  std::vector<std::string> segments;
+  size_t start = 0;
+  while (start < path.size()) {
+    size_t pos = path.find("::", start);
+    if (pos == std::string::npos) {
+      segments.push_back(path.substr(start));
+      break;
+    }
+    segments.push_back(path.substr(start, pos - start));
+    start = pos + 2;
+  }
+  return segments;
+}
+
+std::string joinPath(const std::vector<std::string> &segments) {
+  std::string path;
+  for (const auto &segment : segments) {
+    path += (path.empty() ? "" : "::") + segment;
+  }
+  return path;
+}
+
+// Library declarations whose bodies insertRequiredObjectsForNode is walking,
+// innermost last. Calls are resolved as seen from the innermost one.
+std::vector<std::shared_ptr<DeclarationNode>> &contextStack() {
+  static thread_local std::vector<std::shared_ptr<DeclarationNode>> stack;
+  return stack;
+}
+
+struct ContextGuard {
+  bool pushed = false;
+  explicit ContextGuard(const std::shared_ptr<DeclarationNode> &decl) {
+    if (decl && decl->getCompilerProperty("_sourcePath")) {
+      contextStack().push_back(decl);
+      pushed = true;
+    }
+  }
+  ~ContextGuard() {
+    if (pushed) {
+      contextStack().pop_back();
+    }
+  }
+};
+
+std::shared_ptr<DeclarationNode> currentContext() {
+  return contextStack().empty() ? nullptr : contextStack().back();
+}
+
+// The namespace a declaration was declared in, as a lookup qualifier: its
+// namespaceTree without a leading framework segment.
+std::vector<std::string> declaredNamespace(const ASTNode &decl,
+                                           const std::string &framework) {
+  auto segments = namespaceTreeOf(decl);
+  if (!segments.empty() && segments.front() == framework) {
+    segments.erase(segments.begin());
+  }
+  return segments;
+}
+
+} // namespace
+
+void ASTFunctions::tagSourceFile(ASTNode fileTree,
+                                 const std::string &sourcePath) {
+  if (!fileTree) {
+    return;
+  }
+  std::shared_ptr<ListNode> imports;
+  for (const auto &import : ASTQuery::getImportNodes(fileTree)) {
+    if (!import->importAlias().empty()) {
+      if (!imports) {
+        imports = std::make_shared<ListNode>(__FILE__, __LINE__);
+      }
+      imports->addChild(std::make_shared<ValueNode>(
+          import->importAlias() + "=" + ASTQuery::getImportPath(import),
+          __FILE__, __LINE__));
+    }
+  }
+  std::string package;
+  auto packageNodes = ASTQuery::getPackageNodes(fileTree);
+  if (!packageNodes.empty()) {
+    package = joinPath(packageNodes[0]->packageSegments());
+  }
+  for (const auto &child : fileTree->getChildren()) {
+    if (child->getNodeType() != AST::Declaration &&
+        child->getNodeType() != AST::ArrayDeclaration) {
+      continue;
+    }
+    child->setCompilerProperty(
+        "_sourcePath",
+        std::make_shared<ValueNode>(sourcePath, __FILE__, __LINE__));
+    if (!package.empty()) {
+      child->setCompilerProperty(
+          "_package", std::make_shared<ValueNode>(package, __FILE__, __LINE__));
+    }
+    if (imports) {
+      child->setCompilerProperty("_imports", imports);
+    }
+  }
+}
+
+void ASTFunctions::prefixSourcePath(ASTNode decl, const std::string &prefix) {
+  if (prefix.empty() || !decl || !decl->getCompilerProperty("_sourcePath")) {
+    return;
+  }
+  auto path = stringProperty(decl, "_sourcePath");
+  decl->setCompilerProperty(
+      "_sourcePath", std::make_shared<ValueNode>(
+                         path.empty() ? prefix : prefix + "::" + path,
+                         __FILE__, __LINE__));
+}
+
+void ASTFunctions::checkPackageLocation(ASTNode decl) {
+  auto package = stringProperty(decl, "_package");
+  auto sourcePath = stringProperty(decl, "_sourcePath");
+  if (package.empty() || sourcePath.empty()) {
+    return;
+  }
+  auto lastSeparator = sourcePath.rfind("::");
+  std::string directory = lastSeparator == std::string::npos
+                              ? std::string()
+                              : sourcePath.substr(0, lastSeparator);
+  if (package == sourcePath || package == directory) {
+    return;
+  }
+  static std::set<std::string> warned;
+  if (warned.insert(sourcePath).second) {
+    LOG_WARNING() << "package " << package << " in " << decl->getFilename()
+                  << " matches neither its location (" << sourcePath
+                  << ") nor its directory ("
+                  << (directory.empty() ? "library root" : directory) << ")"
+                  << std::endl;
+  }
+}
+
+bool ASTFunctions::canonicalizeQualifier(
+    ASTNode node, std::shared_ptr<DeclarationNode> context, ASTNode tree,
+    const std::map<std::string, std::vector<ASTNode>> &objects) {
+  std::string name;
+  if (node->getNodeType() == AST::Function) {
+    name = std::static_pointer_cast<FunctionNode>(node)->getName();
+  } else if (node->getNodeType() == AST::Entity) {
+    name = std::static_pointer_cast<EntityNode>(node)->getName();
+  } else if (node->getNodeType() == AST::Array) {
+    name = std::static_pointer_cast<ArrayNode>(node)->getName();
+  } else {
+    return false;
+  }
+
+  // Declarations named `name` in `target`: by package, or (sourceToo) by the
+  // path of the file they were loaded from (`import Control::Foc as Foc`
+  // names Control/Foc.stride, whose package is Control). Declarations already
+  // inserted into the tree have left `objects`, so the tree is searched too.
+  auto find = [&](const std::vector<std::string> &target,
+                  bool sourceToo) -> std::shared_ptr<DeclarationNode> {
+    const std::string targetPath = joinPath(target);
+    auto matches = [&](const ASTNode &member)
+        -> std::shared_ptr<DeclarationNode> {
+      if (member->getNodeType() != AST::Declaration &&
+          member->getNodeType() != AST::ArrayDeclaration) {
+        return nullptr;
+      }
+      auto decl = std::static_pointer_cast<DeclarationNode>(member);
+      if (decl->getName() != name) {
+        return nullptr;
+      }
+      if (namespaceTreeOf(decl) == target ||
+          (sourceToo && stringProperty(decl, "_sourcePath") == targetPath)) {
+        return decl;
+      }
+      return nullptr;
+    };
+    if (tree) {
+      for (const auto &member : tree->getChildren()) {
+        if (auto decl = matches(member)) {
+          return decl;
+        }
+      }
+    }
+    for (const auto &group : objects) {
+      for (const auto &member : group.second) {
+        if (auto decl = matches(member)) {
+          return decl;
+        }
+      }
+    }
+    return nullptr;
+  };
+
+  auto qualifier = node->getNamespaceList();
+  // STRIDE_DEBUG_NAMES=1 logs every resolution (name, qualifier, context).
+  static const bool debugNames = std::getenv("STRIDE_DEBUG_NAMES") != nullptr;
+  struct DebugLog {
+    bool on;
+    ASTNode node;
+    std::string name, context, before;
+    ~DebugLog() {
+      if (on) {
+        std::cerr << "[names] " << before << (before.empty() ? "" : "::")
+                  << name << " in "
+                  << (context.empty() ? "<no context>" : context) << " -> "
+                  << joinPath(node->getNamespaceList()) << std::endl;
+      }
+    }
+  } debugLog{debugNames, node, name,
+             context ? context->getName() + " (" + joinPath(namespaceTreeOf(context)) + ")"
+                     : std::string(),
+             joinPath(qualifier)};
+  if (!qualifier.empty()) {
+    std::map<std::string, std::string> imports;
+    if (context) {
+      if (auto list = context->getCompilerProperty("_imports")) {
+        for (const auto &entry : list->getChildren()) {
+          auto text = std::static_pointer_cast<ValueNode>(entry)->getStringValue();
+          auto eq = text.find('=');
+          if (eq != std::string::npos) {
+            imports[text.substr(0, eq)] = text.substr(eq + 1);
+          }
+        }
+      }
+    } else if (tree) {
+      for (const auto &import : ASTQuery::getImportNodes(tree)) {
+        if (!import->importAlias().empty()) {
+          imports[import->importAlias()] = ASTQuery::getImportPath(import);
+        }
+      }
+    }
+    // An alias expands to its import path; anything else is a full path
+    // (D1: `import A::B` is reached as `A::B::X`).
+    auto target = qualifier;
+    auto alias = imports.find(qualifier[0]);
+    if (alias != imports.end()) {
+      target = splitPath(alias->second);
+      target.insert(target.end(), qualifier.begin() + 1, qualifier.end());
+    }
+    auto decl = find(target, true);
+    if (!decl) {
+      return false;
+    }
+    auto canonical = namespaceTreeOf(decl);
+    if (canonical == qualifier) {
+      return false;
+    }
+    node->setNamespaceList(canonical);
+    return true;
+  }
+
+  // An unqualified name inside a packaged library declaration: a declaration
+  // of the same package comes before the root namespace, unless the context
+  // declares the name itself (a module's own blocks).
+  if (!context) {
+    return false;
+  }
+  auto package = namespaceTreeOf(context);
+  if (package.empty() || !find(package, false)) {
+    return false;
+  }
+  if (node->getNodeType() != AST::Function) {
+    std::function<bool(const ASTNode &)> declaresName =
+        [&](const ASTNode &n) -> bool {
+      if (!n) {
+        return false;
+      }
+      if (n->getNodeType() == AST::Declaration ||
+          n->getNodeType() == AST::ArrayDeclaration) {
+        auto decl = std::static_pointer_cast<DeclarationNode>(n);
+        if (decl != context && decl->getName() == name) {
+          return true;
+        }
+        for (const auto &property : decl->getProperties()) {
+          if (declaresName(property->getValue())) {
+            return true;
+          }
+        }
+        return false;
+      }
+      for (const auto &child : n->getChildren()) {
+        if (declaresName(child)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    if (declaresName(context)) {
+      return false;
+    }
+  }
+  node->setNamespaceList(package);
+  return true;
+}
+
 void ASTFunctions::insertRequiredObjects(
     ASTNode tree, std::map<std::string, std::vector<ASTNode>> externalNodes,
     ScopeStack *platformScope) {
@@ -214,6 +529,8 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
       std::string fileName = dir_entry.path().string();
       auto newTree = AST::parseFile(fileName.c_str(), nullptr);
       if (newTree) {
+        // Relative to `path`; callers prefix the rest of the import path.
+        tagSourceFile(newTree, stem);
         auto packageNodes = ASTQuery::getPackageNodes(newTree);
         std::vector<std::string> pkgSegs;
         if (!packageNodes.empty()) {
@@ -254,6 +571,7 @@ std::vector<ASTNode> ASTFunctions::loadAllInDirectory(std::string path) {
                   "namespaceTree",
                   std::make_shared<ValueNode>(dirName, __FILE__, __LINE__));
             }
+            prefixSourcePath(subNode, dirName);
             nodes.push_back(subNode);
           }
         }
@@ -431,6 +749,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
                                    processedNodes);
     }
   } else if (node->getNodeType() == AST::Function) {
+    canonicalizeQualifier(node, currentContext(), tree, objects);
     FunctionNode *func = static_cast<FunctionNode *>(node.get());
     ScopeStack localScope;
     ScopeStack *effectiveScope = platformScope ? platformScope : &localScope;
@@ -514,6 +833,9 @@ void ASTFunctions::insertRequiredObjectsForNode(
              node->getNodeType() == AST::ArrayDeclaration) {
     std::shared_ptr<DeclarationNode> declaration =
         std::static_pointer_cast<DeclarationNode>(node);
+    // Names in a library declaration's body resolve against its own file's
+    // imports and package.
+    ContextGuard context(declaration);
 
     for (const auto &property : declaration->getProperties()) {
       insertRequiredObjectsForNode(property->getValue(), objects, tree,
@@ -608,6 +930,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
     //    }
   } else if (node->getNodeType() == AST::Entity) {
     //    QList<std::shared_ptr<DeclarationNode>> blockList;
+    canonicalizeQualifier(node, currentContext(), tree, objects);
     EntityNode *name = static_cast<EntityNode *>(node.get());
 
     auto declaration = ASTQuery::findDeclarationByName(
@@ -643,11 +966,10 @@ void ASTFunctions::insertRequiredObjectsForNode(
           framework = std::static_pointer_cast<ValueNode>(frameworkNode)
                           ->getStringValue();
         }
-        auto namespaceList = usedEntity->getNamespaceList();
-        //        if (namespaceList.size() > 0 && namespaceList[0] == framework)
-        //        {
-        //          namespaceList.erase(namespaceList.begin());
-        //        }
+        // A declaration's package is its namespaceTree (getNamespaceList() is
+        // a reference's qualifier, empty on declarations): with it a root
+        // `Gain` is not mistaken for an already inserted `Pkg::Gain`.
+        auto namespaceList = declaredNamespace(usedEntity, framework);
         auto existingDeclaration = ASTQuery::findDeclarationByName(
             ASTQuery::getNodeName(usedEntity), {}, tree, namespaceList, framework);
         if (existingDeclaration &&
@@ -664,6 +986,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
     }
   } else if (node->getNodeType() == AST::Array) {
     std::vector<std::shared_ptr<DeclarationNode>> blockList;
+    canonicalizeQualifier(node, currentContext(), tree, objects);
     auto arrayNode = std::static_pointer_cast<ArrayNode>(node);
     auto declaration = ASTQuery::findDeclarationByName(
         ASTQuery::getNodeName(node), {}, tree, arrayNode->getNamespaceList(),
@@ -692,7 +1015,9 @@ void ASTFunctions::insertRequiredObjectsForNode(
           framework = std::static_pointer_cast<ValueNode>(frameworkNode)
                           ->getStringValue();
         }
-        auto existingDeclaration = ASTQuery::findDeclarationForNode(usedEntity, {}, tree, framework);
+        auto existingDeclaration = ASTQuery::findDeclarationByName(
+            ASTQuery::getNodeName(usedEntity), {}, tree,
+            declaredNamespace(usedEntity, framework), framework);
         if (!existingDeclaration) {
           tree->addChild(usedEntity);
         }

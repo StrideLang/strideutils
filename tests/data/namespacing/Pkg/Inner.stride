@@ -1,0 +1,26 @@
+package Pkg
+
+module Twice {
+    ports: [
+        mainInputPort InPort { entity: Input }
+        mainOutputPort OutPort { entity: Output }
+    ]
+    entities: [
+        signal Input { type: Real domain: OutPort.domain }
+        signal Output { type: Real domain: OutPort.domain }
+    ]
+    streams: [ Input * 2.0 >> Output; ]
+}
+
+# Calls its sibling unqualified: resolves to Pkg::Twice
+module Quad {
+    ports: [
+        mainInputPort InPort { entity: Input }
+        mainOutputPort OutPort { entity: Output }
+    ]
+    entities: [
+        signal Input { type: Real domain: OutPort.domain }
+        signal Output { type: Real domain: OutPort.domain }
+    ]
+    streams: [ Input >> Twice() >> Twice() >> Output; ]
+}

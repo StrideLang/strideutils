@@ -9,6 +9,7 @@ set(STRIDEUTILS_TEST_SRC
   logger_tests.cpp
   cache_tests.cpp
   lookup_lint_tests.cpp
+  namespacing_tests.cpp
 )
 
 add_executable(strideutils_tests main.cpp ${STRIDEUTILS_TEST_SRC})

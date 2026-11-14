@@ -1,0 +1,3 @@
+import Pkg::Inner as I
+
+In >> I::Quad() >> Out;

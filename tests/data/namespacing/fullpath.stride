@@ -1,0 +1,3 @@
+import Pkg::Inner
+
+In >> Pkg::Inner::Twice() >> Out;
