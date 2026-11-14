@@ -4,9 +4,16 @@
 
 #include "gtest/gtest.h"
 
+#include <chrono>
+#include <filesystem>
 #include <functional>
+#include <map>
 
+#include "stride/parser/declarationnode.h"
 #include "stride/parser/functionnode.h"
+#include "stride/parser/valuenode.h"
+#include "stride/utils/cachemanager.h"
+#include "stride/utils/stridelibrary.h"
 #include "stride/parser/streamnode.h"
 #include "stride/utils/astfunctions.h"
 #include "stride/utils/astquery.h"
@@ -119,6 +126,64 @@ TEST(Namespacing, UnqualifiedPackageConstantResolves) {
   EXPECT_EQ(streams.find("5.0"), std::string::npos)
       << "the root Gain leaked into the package module: " << streams;
   EXPECT_NE(streams.find(">> Output"), std::string::npos) << streams;
+}
+
+TEST(Namespacing, ResolutionSurvivesTheCache) {
+  // Cached trees must carry the properties resolution depends on
+  // (_sourcePath, _package, _imports, namespaceTree), and a cached directory
+  // must not have its source paths prefixed twice. Run cold, then warm.
+  auto dir = std::filesystem::temp_directory_path() /
+             ("stride_ns_cache_" +
+              std::to_string(std::chrono::steady_clock::now()
+                                 .time_since_epoch()
+                                 .count()));
+  auto &cache = CacheManager::instance();
+  CacheManager::TestAccess::setExperimentalCompilerOverride(0);
+  const bool wasEnabled = cache.isEnabled();
+  const bool wasForce = cache.isForceRecompile();
+  const auto previousDir = cache.getCacheDirectory();
+  cache.setEnabled(true);
+  cache.setForceRecompile(false);
+  cache.setCacheDirectory(dir);
+  cache.resetStats();
+
+  for (const char *pass : {"cold", "warm"}) {
+    SCOPED_TRACE(pass);
+    auto aliased = preprocessed(TESTS_SOURCE_DIR "namespacing/aliased.stride");
+    ASSERT_TRUE(aliased);
+    auto calls = rootCalls(aliased);
+    ASSERT_EQ(calls.size(), 1u);
+    EXPECT_EQ(calls[0]->getNamespaceList(), kPkg);
+    EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, aliased, kPkg));
+
+    auto constant = preprocessed(TESTS_SOURCE_DIR "namespacing/constant.stride");
+    ASSERT_TRUE(constant);
+    auto amplify = ASTQuery::findDeclarationByName("Amplify", {}, constant, kPkg);
+    ASSERT_TRUE(amplify);
+    auto streams = amplify->getPropertyValue("streams")->toText();
+    EXPECT_NE(streams.find("Input * 3.0"), std::string::npos) << streams;
+
+    // A directory import: source paths below it, prefixed exactly once.
+    StrideLibrary library;
+    library.initializeLibrary("", {TESTS_SOURCE_DIR "namespacing"});
+    std::map<std::string, std::string> sources;
+    for (const auto &node : library.loadImport("Pkg", "")) {
+      if (auto path = node->getCompilerProperty("_sourcePath")) {
+        sources[std::static_pointer_cast<DeclarationNode>(node)->getName()] =
+            std::static_pointer_cast<ValueNode>(path)->getStringValue();
+      }
+    }
+    EXPECT_EQ(sources["Gain"], "Pkg::Gains");
+    EXPECT_EQ(sources["Twice"], "Pkg::Inner");
+  }
+  EXPECT_GT(cache.getStats().hits, 0u) << "the warm pass did not use the cache";
+
+  cache.setCacheDirectory(previousDir);
+  cache.setForceRecompile(wasForce);
+  cache.setEnabled(wasEnabled);
+  CacheManager::TestAccess::setExperimentalCompilerOverride(-1);
+  std::error_code ec;
+  std::filesystem::remove_all(dir, ec);
 }
 
 TEST(Namespacing, FullImportPathResolves) {
