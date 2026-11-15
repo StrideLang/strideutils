@@ -346,7 +346,7 @@ TEST(Library, PackageTestImport) {
 
 TEST(Library, PackageTestingImport) {
   StrideLibrary library;
-  library.initializeLibrary(STRIDEROOT, {});
+  library.initializeLibrary(ASTFunctions::getDefaultStrideRoot(), {});
 
   auto nodes = library.loadImport("Testing", "Testing");
   EXPECT_FALSE(nodes.empty());
