@@ -1429,6 +1429,20 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
         }
 
       } else {
+        if (property->getName() == "rate" && property->getValue() &&
+            (property->getValue()->getNodeType() == AST::Expression ||
+             property->getValue()->getNodeType() == AST::MemberAccess)) {
+          std::vector<LangError> rateErrors;
+          double rateVal = evaluateConstReal(property->getValue(), scope, tree,
+                                             &rateErrors);
+          if (rateErrors.empty()) {
+            auto rateNode = std::make_shared<ValueNode>(
+                rateVal, property->getValue()->getFilename().c_str(),
+                property->getValue()->getLine());
+            rateNode->setCompilerProperty("resolvedFrom", property->getValue());
+            property->replaceValue(rateNode);
+          }
+        }
         resolveConstantsInNode(property->getValue(), scope, tree);
         std::shared_ptr<ValueNode> newValue =
             resolveConstant(property->getValue(), scope, tree, frameworkName);
@@ -1624,6 +1638,12 @@ ASTFunctions::resolveConstant(ASTNode value, ScopeStack scope, ASTNode tree,
           propertyValue = propertyValue->deepCopy();
           propertyValue->setCompilerProperty("resolvedFrom", entityDecl);
           return std::static_pointer_cast<ValueNode>(propertyValue);
+        }
+        auto resolvedProp =
+            ASTFunctions::resolveConstant(propertyValue, scope, tree, framework);
+        if (resolvedProp) {
+          resolvedProp->setCompilerProperty("resolvedFrom", entityDecl);
+          return resolvedProp;
         }
       }
     }
@@ -1850,6 +1870,55 @@ double ASTFunctions::evaluateConstReal(ASTNode node, ScopeStack scope,
   double result = 0;
   if (node->getNodeType() == AST::Real) {
     return static_cast<ValueNode *>(node.get())->getRealValue();
+  } else if (node->getNodeType() == AST::MemberAccess) {
+    auto member = std::static_pointer_cast<MemberAccessNode>(node);
+    auto declaration =
+        ASTQuery::findDeclarationByName(member->getEntity(), scope, tree);
+    if (declaration) {
+      if (member->getPropertyName() == "size" &&
+          declaration->getNodeType() == AST::ArrayDeclaration) {
+        std::vector<LangError> sizeErrors;
+        const int size = ASTQuery::getEntityDeclaredSize(declaration, scope,
+                                                         tree, &sizeErrors);
+        if (sizeErrors.empty() && size >= 0) {
+          return static_cast<double>(size);
+        }
+      }
+      ASTNode propVal =
+          declaration->getPropertyValue(member->getPropertyName());
+      if (propVal && propVal->getNodeType() != AST::None) {
+        return evaluateConstReal(propVal, scope, tree, errors);
+      }
+    }
+    if (errors) {
+      LangError error;
+      error.type = LangError::InvalidType;
+      error.lineNumber = node->getLine();
+      error.errorTokens.push_back(member->getEntity() + "." +
+                                  member->getPropertyName());
+      errors->push_back(error);
+    }
+    return 0.0;
+  } else if (node->getNodeType() == AST::Expression) {
+    auto expr = std::static_pointer_cast<ExpressionNode>(node);
+    if (expr->getExpressionType() == ExpressionNode::UnaryMinus) {
+      return -evaluateConstReal(expr->getValue(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Add) {
+      return evaluateConstReal(expr->getLeft(), scope, tree, errors) +
+             evaluateConstReal(expr->getRight(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Subtract) {
+      return evaluateConstReal(expr->getLeft(), scope, tree, errors) -
+             evaluateConstReal(expr->getRight(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Multiply) {
+      return evaluateConstReal(expr->getLeft(), scope, tree, errors) *
+             evaluateConstReal(expr->getRight(), scope, tree, errors);
+    } else if (expr->getExpressionType() == ExpressionNode::Divide) {
+      double denom = evaluateConstReal(expr->getRight(), scope, tree, errors);
+      if (denom != 0.0) {
+        return evaluateConstReal(expr->getLeft(), scope, tree, errors) / denom;
+      }
+    }
+    return 0.0;
   } else if (node->getNodeType() == AST::Int) {
     return static_cast<ValueNode *>(node.get())->getIntValue();
   } else if (node->getNodeType() == AST::Array) {

@@ -88,6 +88,12 @@ std::map<std::string, std::vector<ASTNode>> StrideLibrary::getLibraryMembers() {
 
 std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
                                                std::string importAs) {
+  for (const auto &existing : m_libraryTrees) {
+    if (!importName.empty() && existing.importName == importName &&
+        existing.importAs == importAs) {
+      return existing.nodes;
+    }
+  }
   // Normalize importName: replace "::" with "/"
   std::string normalized = importName;
   size_t pos = 0;
@@ -139,6 +145,13 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
       return;
     }
     ASTFunctions::tagSourceFile(fileTree, importName);
+    for (const auto &subImport : ASTQuery::getImportNodes(fileTree)) {
+      std::string subImportName = ASTQuery::getImportPath(subImport);
+      std::string subImportAlias = subImport->importAlias();
+      if (!subImportName.empty() && subImportName != importName) {
+        loadImport(subImportName, subImportAlias);
+      }
+    }
     auto packageNodes = ASTQuery::getPackageNodes(fileTree);
     std::vector<std::string> pkgSegs;
     if (!packageNodes.empty()) {
