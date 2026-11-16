@@ -4,11 +4,13 @@
 #include "stride/utils/logger.h"
 
 #include "stride/parser/arraynode.h"
+#include "stride/parser/expressionnode.h"
 #include "stride/parser/generatorrangenode.h"
 #include "stride/parser/rangenode.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -18,12 +20,147 @@ using namespace strd;
 
 ASTValidation::ASTValidation() {}
 
+ASTNode ASTValidation::getDefaultSchemaTree() {
+  static std::string s_cachedRoot;
+  static ASTNode s_defaultSchema = nullptr;
+  std::string root = ASTFunctions::getDefaultStrideRoot();
+  if (root != s_cachedRoot) {
+    s_cachedRoot = root;
+    s_defaultSchema = nullptr;
+    if (!root.empty()) {
+      std::filesystem::path libDir =
+          std::filesystem::path(root) / "library" / "1.0";
+      std::filesystem::path schemaPath = libDir / "Schema.stride";
+      if (std::filesystem::exists(schemaPath)) {
+        s_defaultSchema = AST::parseFile(schemaPath.string().c_str(), nullptr);
+      }
+      std::filesystem::path literalsPath = libDir / "Literals.stride";
+      if (std::filesystem::exists(literalsPath)) {
+        if (ASTNode literalsTree =
+                AST::parseFile(literalsPath.string().c_str(), nullptr)) {
+          if (!s_defaultSchema) {
+            s_defaultSchema = std::make_shared<AST>(AST::None, "");
+          }
+          for (const auto &child : literalsTree->getChildren()) {
+            s_defaultSchema->addChild(child);
+          }
+        }
+      }
+    }
+  }
+  return s_defaultSchema;
+}
+
+bool ASTValidation::validateData(ASTNode dataTree,
+                                 std::vector<LangError> &errors,
+                                 ASTNode schemaTree) {
+  if (!dataTree) {
+    return true;
+  }
+
+  // Only prepend default Schema.stride when no custom schema was provided and
+  // the AST does not already carry preprocessed schema declarations.
+  const bool hasPreprocessedSchema =
+      ASTQuery::findTypeDeclarationByName("type", {}, dataTree) != nullptr;
+  ASTNode defaultSchema =
+      (!schemaTree && hasPreprocessedSchema) ? nullptr : getDefaultSchemaTree();
+  ASTNode contextTree = dataTree;
+  ScopeStack scopeStack;
+
+  if (schemaTree || defaultSchema) {
+    contextTree = std::make_shared<AST>(AST::None, "");
+    if (defaultSchema) {
+      for (const auto &child : defaultSchema->getChildren()) {
+        contextTree->addChild(child);
+      }
+      scopeStack.push_back({defaultSchema, defaultSchema->getChildren()});
+    }
+    if (schemaTree) {
+      for (const auto &child : schemaTree->getChildren()) {
+        contextTree->addChild(child);
+      }
+      scopeStack.push_back({schemaTree, schemaTree->getChildren()});
+    }
+    for (const auto &child : dataTree->getChildren()) {
+      contextTree->addChild(child);
+    }
+  }
+
+  std::set<const void *> processedNodes;
+  if (schemaTree || defaultSchema) {
+    for (const auto &child : dataTree->getChildren()) {
+      validateTypes(child, errors, scopeStack, contextTree, {}, "",
+                    &processedNodes);
+    }
+    if (dataTree->getChildren().empty() &&
+        (dataTree->getNodeType() == AST::Declaration ||
+         dataTree->getNodeType() == AST::ArrayDeclaration)) {
+      validateTypes(dataTree, errors, scopeStack, contextTree, {}, "",
+                    &processedNodes);
+    }
+  } else {
+    validateTypes(dataTree, errors, scopeStack, contextTree, {}, "",
+                  &processedNodes);
+  }
+
+  return errors.empty();
+}
+
+namespace {
+void validateDataTypesInTree(const ASTNode &tree, const ASTNode &contextTree,
+                             std::vector<LangError> &errors);
+}
+
+bool ASTValidation::validatePipeline(ASTNode tree,
+                                     std::vector<LangError> &errors,
+                                     ScopeStack scopeStack,
+                                     ASTNode schemaTree) {
+  (void)scopeStack;
+  if (!tree) {
+    return true;
+  }
+  ASTNode contextTree = tree;
+  if (schemaTree) {
+    contextTree = std::make_shared<AST>(AST::None, "");
+    for (const auto &child : schemaTree->getChildren()) {
+      contextTree->addChild(child);
+    }
+    for (const auto &child : tree->getChildren()) {
+      contextTree->addChild(child);
+    }
+  }
+  validateShadowing(tree, errors);
+  validateDataTypesInTree(tree, contextTree, errors);
+  return errors.empty();
+}
+
+bool ASTValidation::validate(ASTNode tree, std::vector<LangError> &errors,
+                             ValidationMode mode, ASTNode schemaTree) {
+  if (!tree) {
+    return true;
+  }
+  if (mode == ValidationMode::DataOnly) {
+    return validateData(tree, errors, schemaTree);
+  } else if (mode == ValidationMode::Pipeline) {
+    return validatePipeline(tree, errors, {}, schemaTree);
+  } else {
+    bool dataOk = validateData(tree, errors, schemaTree);
+    bool pipeOk = validatePipeline(tree, errors, {}, schemaTree);
+    return dataOk && pipeOk;
+  }
+}
+
 std::vector<LangError> ASTValidation::validate(ASTNode tree) {
   std::vector<LangError> errors;
-  std::set<const void *> processedNodes;
-  validateTypes(tree, errors, {}, tree, {}, "", &processedNodes);
-  validateShadowing(tree, errors);
-  validateDataTypes(tree, errors);
+  validate(tree, errors, ValidationMode::All, nullptr);
+  return errors;
+}
+
+std::vector<LangError> ASTValidation::validate(ASTNode tree,
+                                               ValidationMode mode,
+                                               ASTNode schemaTree) {
+  std::vector<LangError> errors;
+  validate(tree, errors, mode, schemaTree);
   return errors;
 }
 
@@ -370,13 +507,12 @@ void validateDeclarationDataTypes(const std::shared_ptr<DeclarationNode> &decl,
   }
 }
 
-} // namespace
-
-void ASTValidation::validateDataTypes(ASTNode tree,
-                                      std::vector<LangError> &errors) {
+void validateDataTypesInTree(const ASTNode &tree, const ASTNode &contextTree,
+                             std::vector<LangError> &errors) {
   if (!tree) {
     return;
   }
+  ASTNode lookupTree = contextTree ? contextTree : tree;
   std::set<const void *> visited;
   for (const auto &node : tree->getChildren()) {
     if (!isDeclarationNode(node)) {
@@ -384,17 +520,24 @@ void ASTValidation::validateDataTypes(ASTNode tree,
     }
     auto decl = std::static_pointer_cast<DeclarationNode>(node);
     if (decl->getEntityType() == "frameworkDataType") {
-      validateFrameworkDataType(decl, tree, errors);
+      validateFrameworkDataType(decl, lookupTree, errors);
     } else if (decl->getEntityType() == "typeClass") {
-      validateTypeClass(decl, tree, errors);
+      validateTypeClass(decl, lookupTree, errors);
     } else if (decl->getEntityType() == "type") {
-      validateSchemaType(decl, tree, errors);
+      validateSchemaType(decl, lookupTree, errors);
     } else if (decl->getEntityType() == "alias") {
-      validateAlias(decl, tree, errors);
+      validateAlias(decl, lookupTree, errors);
     } else {
-      validateDeclarationDataTypes(decl, tree, errors, visited);
+      validateDeclarationDataTypes(decl, lookupTree, errors, visited);
     }
   }
+}
+
+} // namespace
+
+void ASTValidation::validateDataTypes(ASTNode tree,
+                                      std::vector<LangError> &errors) {
+  validateDataTypesInTree(tree, tree, errors);
 }
 
 void ASTValidation::validateTypes(ASTNode node, std::vector<LangError> &errors,
@@ -2551,6 +2694,17 @@ bool ASTValidation::matchesAllowedType(
                                                   currentFramework);
     if (resolved) {
       evalElement = resolved;
+    } else {
+      auto expr = std::static_pointer_cast<ExpressionNode>(evalElement);
+      if (expr->isUnary()) {
+        return matchesAllowedType(expr->getValue(), validTypes, scopeStack,
+                                  tree, parentNamespace, currentFramework);
+      } else {
+        return matchesAllowedType(expr->getLeft(), validTypes, scopeStack, tree,
+                                  parentNamespace, currentFramework) &&
+               matchesAllowedType(expr->getRight(), validTypes, scopeStack,
+                                  tree, parentNamespace, currentFramework);
+      }
     }
   }
 

@@ -27,6 +27,7 @@
 
 #include "stride/parser/ast.h"
 #include "stride/parser/declarationnode.h"
+#include "stride/utils/astquery.h"
 
 #include <functional>
 #include <set>
@@ -36,7 +37,33 @@ class ASTValidation {
 public:
   ASTValidation();
 
+  enum class ValidationMode { DataOnly, Pipeline, All };
+
+  // Validates pure data AST against declarative schemas (entity types,
+  // properties, values, scalar and collection constraints, access flags).
+  // Operates on raw parsed AST without requiring compiler pipeline or DSP
+  // preprocessing.
+  static bool validateData(ASTNode dataTree, std::vector<LangError> &errors,
+                           ASTNode schemaTree = nullptr);
+
+  // Validates post-preprocessing compilation and DSP pipeline semantics
+  // (domain member shadowing in reactions/loops, data type vs schema type
+  // separation).
+  static bool validatePipeline(ASTNode tree, std::vector<LangError> &errors,
+                               ScopeStack scopeStack = ScopeStack(),
+                               ASTNode schemaTree = nullptr);
+
+  // General validation entry point parameterized by ValidationMode.
+  static bool validate(ASTNode tree, std::vector<LangError> &errors,
+                       ValidationMode mode = ValidationMode::All,
+                       ASTNode schemaTree = nullptr);
+
   static std::vector<LangError> validate(ASTNode tree);
+  static std::vector<LangError> validate(ASTNode tree, ValidationMode mode,
+                                         ASTNode schemaTree = nullptr);
+
+  // Returns default Schema.stride AST root (cached), or nullptr if not found.
+  static ASTNode getDefaultSchemaTree();
   // Verifies that types are declared for all nodes, and that the properties and
   // property types are allowed by the type declaration
   static void validateTypes(ASTNode node, std::vector<LangError> &errors,

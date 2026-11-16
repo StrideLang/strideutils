@@ -228,3 +228,64 @@ Schema validation emits strongly typed errors from [`LangError::ErrorType`](file
 | `PrivatePort` | A property with `public: off` is accessed via member access (`Obj.prop`). |
 | `ReadOnlyPort` | A property with `writeable: off` is assigned in a declaration. |
 | `ConstraintFail` | A scalar boundary, regex pattern, collection size, `contains` count, or `uniqueBy` uniqueness check fails. |
+
+
+---
+
+## 8. Two-Phase Validation Architecture
+
+Validation is architecturally split into two distinct phases to support Stride as both a compiled real-time DSP language and a lightweight declarative data storage/configuration language:
+
+```mermaid
+flowchart TD
+    subgraph Phase 1: Pure Data / Schema Validation
+        RawAST["Raw Parsed AST (data)"] --> ValidateData["ASTValidation::validateData"]
+        SchemaAST["Schema AST (Schema.stride / custom)"] -.-> ValidateData
+        ValidateData -->|Pass| DataOK["Valid Data Tree"]
+        ValidateData -->|Fail| DataErrors["LangError (ConstraintFail, InvalidPort, etc.)"]
+    end
+
+    subgraph Phase 2: Compiler Pipeline Validation
+        DataOK --> Preprocess["ASTFunctions::preprocess"]
+        Preprocess --> ValidatePipe["ASTValidation::validatePipeline"]
+        ValidatePipe -->|Pass| CodeGen["Code Generation (stridegen / stridejit)"]
+        ValidatePipe -->|Fail| PipeErrors["LangError (ShadowedSymbol, InvalidDataType, etc.)"]
+    end
+```
+
+### 8.1 Phase 1: Data-Only Validation (`validateData`)
+- **Purpose**: Evaluates pure declarative data structures against schemas without requiring compiler preprocessing or DSP runtime semantics.
+- **Rules Checked**:
+  - Entity type existence against schema (`UnknownType`)
+  - Allowed and required properties (`InvalidPort`)
+  - Property value type matching (`InvalidPortType`)
+  - Scalar constraints: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `pattern` (`ConstraintFail`)
+  - Collection constraints: `minItems`, `maxItems`, `uniqueItems`, `uniqueBy`, `contains`, `minContains`, `maxContains` (`ConstraintFail`)
+  - Access control: `public: on` on member access (`PrivatePort`), `writeable: on` on entity declarations (`ReadOnlyPort`)
+- **Key Advantage**: Operates on raw parsed AST trees. Does NOT require domain rates, clocks, signal routing, or compiler preprocessing passes. Can validate standalone configuration files against separate schema files.
+
+### 8.2 Phase 2: Semantic Pipeline Validation (`validatePipeline`)
+- **Purpose**: Evaluates compile-time program structure and DSP semantics after AST preprocessing.
+- **Rules Checked**:
+  - Domain member shadowing (`validateShadowing`): prevents loop and reaction local entities from shadowing outer declarations.
+  - Signal data types vs. schema types (`validateDataTypes`): prevents schema types from polluting DSP signals.
+
+### 8.3 Unified Validation Entry Point (`ValidationMode`)
+Callers can choose the desired validation pass via `ValidationMode`:
+- `ValidationMode::DataOnly`: runs `validateData`.
+- `ValidationMode::Pipeline`: runs `validatePipeline`.
+- `ValidationMode::All`: runs both passes sequentially.
+
+```cpp
+// Pure data validation with separate schema
+ASTNode schema = AST::parseFile("game_schema.stride");
+ASTNode data = AST::parseFile("level1.stride");
+
+std::vector<LangError> errors;
+if (!ASTValidation::validateData(data, errors, schema)) {
+  // Handle validation errors...
+}
+
+// Or using ValidationMode
+ASTValidation::validate(data, errors, ASTValidation::ValidationMode::DataOnly, schema);
+```

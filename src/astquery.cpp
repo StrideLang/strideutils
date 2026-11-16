@@ -743,7 +743,8 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
       }
       return -1;
     }
-    if (entityDecl->getEntityType() == "buffer") {
+    if (entityDecl->getEntityType() == "buffer" ||
+        entityDecl->getEntityType() == "table") {
       auto sizeNode = std::static_pointer_cast<DeclarationNode>(entityDecl)
                           ->getPropertyValue("size");
       if (sizeNode) {

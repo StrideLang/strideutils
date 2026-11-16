@@ -1,0 +1,53 @@
+# Schema for two-phase validation tests
+type GamePlayer {
+    typeName: "gamePlayer"
+    properties: [
+        typeProperty {
+            name: "handle"
+            allowedTypes: [
+                constrainedString {
+                    minLength: 3
+                    maxLength: 12
+                }
+            ]
+            required: on
+        }
+        typeProperty {
+            name: "rating"
+            allowedTypes: [
+                constrainedInt {
+                    minimum: 100
+                    maximum: 3000
+                }
+            ]
+            default: 1200
+        }
+        typeProperty {
+            name: "role"
+            allowedTypes: [ "warrior", "mage", "rogue" ]
+            default: "warrior"
+        }
+    ]
+}
+
+type GameMatch {
+    typeName: "gameMatch"
+    properties: [
+        typeProperty {
+            name: "matchId"
+            allowedTypes: [ _StringLiteral ]
+            required: on
+        }
+        typeProperty {
+            name: "players"
+            allowedTypes: [
+                constrainedList {
+                    minItems: 2
+                    maxItems: 4
+                    uniqueBy: "handle"
+                }
+            ]
+            required: on
+        }
+    ]
+}

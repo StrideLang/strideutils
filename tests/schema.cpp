@@ -381,3 +381,87 @@ TEST(Schema, FinalType) {
   EXPECT_EQ(errors[3].type, LangError::InvalidPortType);
   EXPECT_EQ(errors[3].lineNumber, 46);
 }
+
+TEST(Schema, TwoPhaseValidationPureData) {
+  ASTNode schemaTree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/15_two_phase_validation_schema.stride");
+  ASSERT_TRUE(schemaTree != nullptr);
+
+  ASTNode dataTree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/15_two_phase_validation_data.stride");
+  ASSERT_TRUE(dataTree != nullptr);
+
+  // Notice: ASTFunctions::preprocess is NOT called on dataTree or schemaTree!
+  // Pure declarative data validation operates directly on raw parsed AST.
+  std::vector<LangError> errors;
+  bool valid = ASTValidation::validateData(dataTree, errors, schemaTree);
+
+  EXPECT_TRUE(valid);
+  EXPECT_EQ(errors.size(), 0);
+}
+
+TEST(Schema, TwoPhaseValidationInvalidData) {
+  ASTNode schemaTree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/15_two_phase_validation_schema.stride");
+  ASSERT_TRUE(schemaTree != nullptr);
+
+  ASTNode dataTree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/15_two_phase_validation_invalid_data.stride");
+  ASSERT_TRUE(dataTree != nullptr);
+
+  std::vector<LangError> errors;
+  bool valid = ASTValidation::validateData(dataTree, errors, schemaTree);
+
+  EXPECT_FALSE(valid);
+  EXPECT_GE(errors.size(), 4);
+
+  // All constraint failures should be reported as LangError::ConstraintFail
+  for (const auto &err : errors) {
+    EXPECT_EQ(err.type, LangError::ConstraintFail);
+  }
+}
+
+TEST(Schema, ValidationModes) {
+  ASTNode schemaTree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/15_two_phase_validation_schema.stride");
+  ASSERT_TRUE(schemaTree != nullptr);
+
+  ASTNode dataTree =
+      AST::parseFile(TESTS_SOURCE_DIR "schema/15_two_phase_validation_data.stride");
+  ASSERT_TRUE(dataTree != nullptr);
+
+  // 1. DataOnly validation mode
+  std::vector<LangError> dataErrors;
+  bool dataOk = ASTValidation::validate(
+      dataTree, dataErrors, ASTValidation::ValidationMode::DataOnly, schemaTree);
+  EXPECT_TRUE(dataOk);
+  EXPECT_TRUE(dataErrors.empty());
+
+  // 2. Pipeline validation mode on data AST (no domain shadowing / data types)
+  std::vector<LangError> pipeErrors;
+  bool pipeOk = ASTValidation::validate(
+      dataTree, pipeErrors, ASTValidation::ValidationMode::Pipeline, schemaTree);
+  EXPECT_TRUE(pipeOk);
+  EXPECT_TRUE(pipeErrors.empty());
+
+  // 3. All validation mode
+  std::vector<LangError> allErrors;
+  bool allOk = ASTValidation::validate(
+      dataTree, allErrors, ASTValidation::ValidationMode::All, schemaTree);
+  EXPECT_TRUE(allOk);
+  EXPECT_TRUE(allErrors.empty());
+}
+
+TEST(Schema, PureDataSelfContainedWithoutPreprocess) {
+  ASTNode tree = AST::parseFile(TESTS_SOURCE_DIR "schema/01_intliterals.stride");
+  ASSERT_TRUE(tree != nullptr);
+
+  // Validating directly without calling ASTFunctions::preprocess(tree)
+  std::vector<LangError> errors;
+  bool valid = ASTValidation::validateData(tree, errors);
+
+  EXPECT_FALSE(valid);
+  EXPECT_EQ(errors.size(), 10);
+  EXPECT_EQ(errors[0].type, LangError::InvalidPortType);
+  EXPECT_EQ(errors[1].type, LangError::ConstraintFail);
+}

@@ -1,0 +1,32 @@
+# Invalid data violating schema constraints
+gamePlayer P_Short {
+    handle: "Al"
+    rating: 2100
+    role: "warrior"
+}
+
+gamePlayer P_Rating {
+    handle: "Legolas"
+    rating: 50
+    role: "rogue"
+}
+
+gamePlayer P_Dup1 {
+    handle: "Clone"
+    rating: 1500
+}
+
+gamePlayer P_Dup2 {
+    handle: "Clone"
+    rating: 1600
+}
+
+gameMatch InvalidMatch_TooFew {
+    matchId: "M-002"
+    players: [ P_Short ]
+}
+
+gameMatch InvalidMatch_UniqueBy {
+    matchId: "M-003"
+    players: [ P_Dup1, P_Dup2 ]
+}

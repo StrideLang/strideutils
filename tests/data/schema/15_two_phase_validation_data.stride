@@ -1,0 +1,17 @@
+# Pure data instances conforming to 15_two_phase_validation_schema.stride
+gamePlayer P1 {
+    handle: "Aragorn"
+    rating: 2100
+    role: "warrior"
+}
+
+gamePlayer P2 {
+    handle: "Gandalf"
+    rating: 2900
+    role: "mage"
+}
+
+gameMatch ValidMatch {
+    matchId: "M-001"
+    players: [ P1, P2 ]
+}
