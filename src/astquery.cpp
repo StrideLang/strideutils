@@ -743,14 +743,17 @@ int ASTQuery::getEntityDeclaredSize(std::shared_ptr<DeclarationNode> entityDecl,
       }
       return -1;
     }
-    if (entityDecl->getEntityType() == "buffer" ||
-        entityDecl->getEntityType() == "table") {
-      auto sizeNode = std::static_pointer_cast<DeclarationNode>(entityDecl)
-                          ->getPropertyValue("size");
-      if (sizeNode) {
-        auto size =
-            ASTFunctions::evaluateConstInteger(sizeNode, scope, tree, errors);
-        return size;
+    if (entityDecl->getEntityType() == "buffer") {
+      auto decl = std::static_pointer_cast<DeclarationNode>(entityDecl);
+      for (const char *propName : {"frameSize", "capacity", "size"}) {
+        auto sizeNode = decl->getPropertyValue(propName);
+        if (sizeNode && sizeNode->getNodeType() != AST::None) {
+          auto size =
+              ASTFunctions::evaluateConstInteger(sizeNode, scope, tree, errors);
+          if (size > 0) {
+            return size;
+          }
+        }
       }
       return -1;
     } else {

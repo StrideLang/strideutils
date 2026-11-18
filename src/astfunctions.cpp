@@ -690,8 +690,19 @@ void ASTFunctions::insertDependentTypes(
 
     for (const auto &inheritedType : inheritedTypes) {
       const auto &children = tree->getChildren();
-      if (std::find(children.begin(), children.end(), inheritedType) ==
-          children.end()) {
+      bool alreadyInTree = std::any_of(
+          children.begin(), children.end(), [&](const ASTNode &child) {
+            if (child == inheritedType) {
+              return true;
+            }
+            if (child && child->getNodeType() == AST::Declaration) {
+              auto cd = std::static_pointer_cast<DeclarationNode>(child);
+              return cd->getName() == inheritedType->getName() &&
+                     cd->getEntityType() == inheritedType->getEntityType();
+            }
+            return false;
+          });
+      if (!alreadyInTree) {
         tree->addChild(inheritedType);
         auto findPos =
             std::find(it->second.begin(), it->second.end(), inheritedType);
@@ -820,7 +831,7 @@ void ASTFunctions::insertRequiredObjectsForNode(
           } else {
             tree->addChild(usedDecl);
           }
-        } else {
+        } else if (atProp || usedDeclAtProp) {
           tree->addChild(usedDecl);
         }
       } else {
