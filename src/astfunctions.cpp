@@ -361,8 +361,8 @@ bool ASTFunctions::canonicalizeQualifier(
   // names Control/Foc.stride, whose package is Control). Declarations already
   // inserted into the tree have left `objects`, so the tree is searched too.
   auto find = [&](const std::vector<std::string> &target,
-                  bool sourceToo) -> std::shared_ptr<DeclarationNode> {
-    const std::string targetPath = joinPath(target);
+                  bool /*sourceToo*/) -> std::shared_ptr<DeclarationNode> {
+    // Canonical namespaceTree match only (no _sourcePath fallback).
     auto matches = [&](const ASTNode &member)
         -> std::shared_ptr<DeclarationNode> {
       if (member->getNodeType() != AST::Declaration &&
@@ -374,7 +374,7 @@ bool ASTFunctions::canonicalizeQualifier(
         return nullptr;
       }
       if (namespaceTreeOf(decl) == target ||
-          (sourceToo && stringProperty(decl, "_sourcePath") == targetPath)) {
+          false) {
         return decl;
       }
       return nullptr;
@@ -415,6 +415,9 @@ bool ASTFunctions::canonicalizeQualifier(
              context ? context->getName() + " (" + joinPath(namespaceTreeOf(context)) + ")"
                      : std::string(),
              joinPath(qualifier)};
+  if (node->isRootQualified()) {
+    return find(qualifier, false) != nullptr;
+  }
   if (!qualifier.empty()) {
     std::map<std::string, std::string> imports;
     if (context) {
@@ -442,7 +445,7 @@ bool ASTFunctions::canonicalizeQualifier(
       target = splitPath(alias->second);
       target.insert(target.end(), qualifier.begin() + 1, qualifier.end());
     }
-    auto decl = find(target, true);
+    auto decl = find(target, false);
     if (!decl) {
       return false;
     }
@@ -1358,14 +1361,14 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
              node->getNodeType() == AST::ArrayDeclaration) {
     std::shared_ptr<DeclarationNode> decl =
         std::static_pointer_cast<DeclarationNode>(node);
-    std::vector<std::shared_ptr<PropertyNode>> properties =
-        decl->getProperties();
-    std::shared_ptr<ListNode> internalBlocks =
     // A typeClass lists names: a group of constants is an enumeration whose
     // members must keep their names, not turn into their values.
     if (decl->getEntityType() == "typeClass") {
       return;
     }
+    std::vector<std::shared_ptr<PropertyNode>> properties =
+        decl->getProperties();
+    std::shared_ptr<ListNode> internalBlocks =
         std::static_pointer_cast<ListNode>(decl->getPropertyValue("entities"));
     // TODO namespaces
     if (ASTQuery::isCodeGenerator(

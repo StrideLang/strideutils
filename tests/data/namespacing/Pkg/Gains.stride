@@ -1,4 +1,4 @@
-package Pkg
+package Pkg::Gains
 
 constant Gain { value: 3.0 }
 

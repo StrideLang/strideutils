@@ -157,6 +157,18 @@ std::vector<ASTNode> StrideLibrary::loadImport(std::string importName,
     if (!packageNodes.empty()) {
       pkgSegs = packageNodes[0]->packageSegments();
     }
+    if (pkgSegs.empty() && importName.find("::") != std::string::npos) {
+      size_t start = 0;
+      while (start < importName.size()) {
+        size_t sep = importName.find("::", start);
+        if (sep == std::string::npos) {
+          pkgSegs.push_back(importName.substr(start));
+          break;
+        }
+        pkgSegs.push_back(importName.substr(start, sep - start));
+        start = sep + 2;
+      }
+    }
     for (const auto &child : fileTree->getChildren()) {
       if (child->getNodeType() == AST::Declaration ||
           child->getNodeType() == AST::ArrayDeclaration) {

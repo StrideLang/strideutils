@@ -1,4 +1,4 @@
-package Pkg
+package Pkg::Inner
 
 module Twice {
     ports: [

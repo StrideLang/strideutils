@@ -67,7 +67,8 @@ ASTNode preprocessed(const char *file) {
   return tree;
 }
 
-const std::vector<std::string> kPkg = {"Pkg"};
+const std::vector<std::string> kPkgInner = {"Pkg", "Inner"};
+const std::vector<std::string> kPkgGains = {"Pkg", "Gains"};
 
 } // namespace
 
@@ -79,18 +80,18 @@ TEST(Namespacing, AliasedCallResolvesToPackage) {
   auto calls = rootCalls(tree);
   ASSERT_EQ(calls.size(), 1u);
   EXPECT_EQ(calls[0]->getName(), "Quad");
-  EXPECT_EQ(calls[0]->getNamespaceList(), kPkg);
+  EXPECT_EQ(calls[0]->getNamespaceList(), kPkgInner);
 
-  auto quad = ASTQuery::findDeclarationByName("Quad", {}, tree, kPkg);
+  auto quad = ASTQuery::findDeclarationByName("Quad", {}, tree, kPkgInner);
   ASSERT_TRUE(quad) << "Pkg::Quad was not inserted";
   // Quad calls Twice unqualified: its own package comes first.
   auto inner = callsIn(quad->getPropertyValue("streams"));
   ASSERT_EQ(inner.size(), 2u);
   for (const auto &call : inner) {
     EXPECT_EQ(call->getName(), "Twice");
-    EXPECT_EQ(call->getNamespaceList(), kPkg);
+    EXPECT_EQ(call->getNamespaceList(), kPkgInner);
   }
-  EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, tree, kPkg))
+  EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, tree, kPkgInner))
       << "Pkg::Twice, used only inside Quad, was not inserted";
 }
 
@@ -104,7 +105,7 @@ TEST(Namespacing, SecondUseOfAnInsertedDeclarationResolves) {
   auto calls = rootCalls(tree);
   ASSERT_EQ(calls.size(), 2u);
   for (const auto &call : calls) {
-    EXPECT_EQ(call->getNamespaceList(), kPkg);
+    EXPECT_EQ(call->getNamespaceList(), kPkgInner);
   }
 }
 
@@ -116,9 +117,9 @@ TEST(Namespacing, UnqualifiedPackageConstantResolves) {
   auto tree = preprocessed(TESTS_SOURCE_DIR "namespacing/constant.stride");
   ASSERT_TRUE(tree);
 
-  auto amplify = ASTQuery::findDeclarationByName("Amplify", {}, tree, kPkg);
+  auto amplify = ASTQuery::findDeclarationByName("Amplify", {}, tree, kPkgGains);
   ASSERT_TRUE(amplify);
-  EXPECT_TRUE(ASTQuery::findDeclarationByName("Gain", {}, tree, kPkg))
+  EXPECT_TRUE(ASTQuery::findDeclarationByName("Gain", {}, tree, kPkgGains))
       << "Pkg::Gain was not inserted";
 
   auto streams = amplify->getPropertyValue("streams")->toText();
@@ -153,12 +154,12 @@ TEST(Namespacing, ResolutionSurvivesTheCache) {
     ASSERT_TRUE(aliased);
     auto calls = rootCalls(aliased);
     ASSERT_EQ(calls.size(), 1u);
-    EXPECT_EQ(calls[0]->getNamespaceList(), kPkg);
-    EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, aliased, kPkg));
+    EXPECT_EQ(calls[0]->getNamespaceList(), kPkgInner);
+    EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, aliased, kPkgInner));
 
     auto constant = preprocessed(TESTS_SOURCE_DIR "namespacing/constant.stride");
     ASSERT_TRUE(constant);
-    auto amplify = ASTQuery::findDeclarationByName("Amplify", {}, constant, kPkg);
+    auto amplify = ASTQuery::findDeclarationByName("Amplify", {}, constant, kPkgGains);
     ASSERT_TRUE(amplify);
     auto streams = amplify->getPropertyValue("streams")->toText();
     EXPECT_NE(streams.find("Input * 3.0"), std::string::npos) << streams;
@@ -194,6 +195,6 @@ TEST(Namespacing, FullImportPathResolves) {
 
   auto calls = rootCalls(tree);
   ASSERT_EQ(calls.size(), 1u);
-  EXPECT_EQ(calls[0]->getNamespaceList(), kPkg);
-  EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, tree, kPkg));
+  EXPECT_EQ(calls[0]->getNamespaceList(), kPkgInner);
+  EXPECT_TRUE(ASTQuery::findDeclarationByName("Twice", {}, tree, kPkgInner));
 }

@@ -2016,8 +2016,10 @@ ASTQuery::findDeclarationForNode(ASTNode node, const ScopeStack &scopeStack,
   if (!node) {
     return nullptr;
   }
-  return findDeclarationByName(getNodeName(node), scopeStack, tree,
-                               node->getNamespaceList(), framework);
+  return findDeclarationByName(
+      getNodeName(node), node->isRootQualified() ? ScopeStack{} : scopeStack,
+      tree, node->getNamespaceList(), framework);
+
 }
 
 std::vector<std::shared_ptr<DeclarationNode>>
@@ -2027,8 +2029,10 @@ ASTQuery::findAllDeclarationsForNode(ASTNode node, const ScopeStack &scopeStack,
   if (!node) {
     return {};
   }
-  return findAllDeclarations(getNodeName(node), scopeStack, tree,
-                             node->getNamespaceList(), currentFramework);
+  return findAllDeclarations(
+      getNodeName(node), node->isRootQualified() ? ScopeStack{} : scopeStack,
+      tree, node->getNamespaceList(), currentFramework);
+
 }
 
 bool ASTQuery::namespaceMatch(std::vector<std::string> scopeList,
