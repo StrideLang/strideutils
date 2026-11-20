@@ -412,14 +412,36 @@ void validateTypeClass(const std::shared_ptr<DeclarationNode> &decl,
   if (!types) {
     return;
   }
+  // A typeClass groups either data types (_NumericTypes) or constants, which
+  // makes an enumeration a schema can use as allowedTypes (_PinPulls lists
+  // PullNone, PullUp and PullDown). It can't mix the two.
+  bool listsDataTypes = false;
+  bool listsConstants = false;
   for (const auto &member : types->getChildren()) {
     auto memberName = ASTQuery::getNodeName(member);
-    if (member->getNodeType() != AST::Entity || !isDataType(memberName, tree)) {
-      addDataTypeError(member, memberName,
-                       "typeClass '" + decl->getName() +
-                           "' can only list data types.",
-                       errors);
+    if (member->getNodeType() == AST::Entity) {
+      if (isDataType(memberName, tree)) {
+        listsDataTypes = true;
+        continue;
+      }
+      auto memberDecl = ASTQuery::findDeclarationByName(
+          memberName, {}, tree, member->getNamespaceList());
+      if (memberDecl && memberDecl->getEntityType() == "constant") {
+        listsConstants = true;
+        continue;
+      }
     }
+    addDataTypeError(member, memberName,
+                     "typeClass '" + decl->getName() +
+                         "' can only list data types, or constants.",
+                     errors);
+  }
+  if (listsDataTypes && listsConstants) {
+    addDataTypeError(decl, decl->getName(),
+                     "typeClass '" + decl->getName() +
+                         "' lists both data types and constants. List only "
+                         "one kind.",
+                     errors);
   }
 }
 
@@ -1255,6 +1277,24 @@ void ASTValidation::validateTypesForDeclaration(
                                                    {}, currentFramework);
               if (actualType.empty()) {
                 actualType = ASTQuery::getNodeName(portValue);
+              }
+              // A named constant is reported by its name, which says more
+              // than its type when the property expects a group of constants.
+              {
+                ASTNode origin = portValue->getCompilerProperty("resolvedFrom");
+                if (origin && origin->getNodeType() == AST::Declaration &&
+                    std::static_pointer_cast<DeclarationNode>(origin)
+                            ->getEntityType() == "constant") {
+                  actualType =
+                      std::static_pointer_cast<DeclarationNode>(origin)
+                          ->getName();
+                } else if (portValue->getNodeType() == AST::Entity) {
+                  auto constDecl = ASTQuery::findDeclarationForNode(
+                      portValue, scopeStack, tree, currentFramework);
+                  if (constDecl && constDecl->getEntityType() == "constant") {
+                    actualType = constDecl->getName();
+                  }
+                }
               }
 
               if (std::find(validTypeNames.begin(), validTypeNames.end(),
@@ -2832,6 +2872,14 @@ bool ASTValidation::matchesAllowedType(
   if (element->getNodeType() == AST::Declaration ||
       element->getNodeType() == AST::ArrayDeclaration) {
     auto decl = std::static_pointer_cast<DeclarationNode>(element);
+    // A constant named in allowedTypes, directly or through a typeClass of
+    // constants, matches itself. A value folded from it carries the
+    // constant as resolvedFrom and arrives here.
+    if (decl->getEntityType() == "constant" &&
+        std::find(validTypes.begin(), validTypes.end(), decl->getName()) !=
+            validTypes.end()) {
+      return true;
+    }
     std::shared_ptr<DeclarationNode> typeDecl = nullptr;
     if (decl->getEntityType() == "type" ||
         decl->getEntityType() == "platformEntity") {

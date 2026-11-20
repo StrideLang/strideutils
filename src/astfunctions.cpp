@@ -1361,6 +1361,11 @@ void ASTFunctions::resolveConstantsInNode(ASTNode node, ScopeStack scope,
     std::vector<std::shared_ptr<PropertyNode>> properties =
         decl->getProperties();
     std::shared_ptr<ListNode> internalBlocks =
+    // A typeClass lists names: a group of constants is an enumeration whose
+    // members must keep their names, not turn into their values.
+    if (decl->getEntityType() == "typeClass") {
+      return;
+    }
         std::static_pointer_cast<ListNode>(decl->getPropertyValue("entities"));
     // TODO namespaces
     if (ASTQuery::isCodeGenerator(
