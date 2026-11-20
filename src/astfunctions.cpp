@@ -136,9 +136,9 @@ std::string findStrideRoot() {
   candidates.push_back(STRIDEROOT_DEFAULT);
 #endif
 
+  std::error_code ec;
 #if !defined(STRIDE_OFFICIAL_RELEASE)
   // Beside the repositories, from where tests are run (developer builds with STRIDE_DEV only)
-  std::error_code ec;
   const char *strideDev = getenv("STRIDE_DEV");
   if (strideDev && std::string(strideDev) != "0") {
     candidates.push_back(std::filesystem::current_path(ec) / ".." / ".." /
